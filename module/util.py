@@ -158,18 +158,18 @@ def extract_info_from_link(link: str) -> Link:
 async def get_message_by_link(
         client: pyrogram.Client,
         link: str,
-        single_link: bool = False  # 为True时,将每个链接都视作是单文件。
+        single_link: bool = False  # 為True時,將每個連結都視作是單檔案。
 ) -> Union[dict, None]:
     origin_link: str = link
     record_type: set = set()
     link: str = link[:-1] if link.endswith('/') else link
-    if '?single&comment' in link:  # v1.1.0修复讨论组中附带?single时不下载的问题。
+    if '?single&comment' in link:  # v1.1.0修復討論組中附帶?single時不下載的問題。
         record_type.add(LinkType.COMMENT)
         single_link = True
     if '?single' in link:
         link: str = link.split('?single')[0]
         single_link = True
-    if '?comment' in link:  # 链接中包含?comment表示用户需要同时下载评论中的媒体。
+    if '?comment' in link:  # 連結中包含?comment表示用戶需要同時下載評論中的媒體。
         link = link.split('?comment')[0]
         record_type.add(LinkType.COMMENT)
     if link.count('/') >= 5 or 't.me/c/' in link:
@@ -191,25 +191,25 @@ async def get_message_by_link(
     except ValueError:
         chat_id = match.group(1)
     message_id: int = int(match.group(2))
-    log.info(f'解析链接:"{link}",频道:"{chat_id}",消息ID:"{message_id}"。')
+    log.info(f'解析連結:"{link}",頻道:"{chat_id}",訊息ID:"{message_id}"。')
     comment_message: list = []
     if LinkType.COMMENT in record_type:
-        # 如果用户需要同时下载媒体下面的评论,把评论中的所有信息放入列表一起返回。
+        # 如果用戶需要同時下載媒體下面的評論,把評論中的所有資訊放入列表一起返回。
         async for comment in client.get_discussion_replies(chat_id, message_id):
             if not any(getattr(comment, dtype) for dtype in DownloadType()):
                 continue
-            if single_link:  # 处理单链接情况。
+            if single_link:  # 處理單連結情況。
                 if '=' in origin_link and int(origin_link.split('=')[-1]) != comment.id:
                     continue
             comment_message.append(comment)
-        log.info(f'链接:"{link}"的评论中检索到媒体:"{len(comment_message)}"条。')
+        log.info(f'連結:"{link}"的評論中檢索到媒體:"{len(comment_message)}"條。')
     message = await client.get_messages(chat_id=chat_id, message_ids=message_id)
     is_group, group_message = await __is_group(message)
     if single_link:
         is_group = False
         group_message: Union[list, None] = None
-    if is_group or comment_message:  # 组或评论区。
-        try:  # v1.1.2解决当group返回None时出现comment无法下载的问题。
+    if is_group or comment_message:  # 組或評論區。
+        try:  # v1.1.2解決當group返回None時出現comment無法下載的問題。
             group_message.extend(comment_message) if comment_message else None
         except AttributeError:
             if comment_message and group_message is None:
@@ -217,7 +217,7 @@ async def get_message_by_link(
                 group_message.extend(comment_message)
         if comment_message:
             link_type: str = LinkType.TOPIC if LinkType.TOPIC in record_type else LinkType.COMMENT
-            log.info(f'链接:"{link}"解析为"{link_type}",媒体数量:"{len(group_message)}"。')
+            log.info(f'連結:"{link}"解析為"{link_type}",媒體數量:"{len(group_message)}"。')
             return {
                 'link_type': link_type,
                 'chat_id': chat_id,
@@ -226,16 +226,16 @@ async def get_message_by_link(
             }
         else:
             link_type = LinkType.TOPIC if LinkType.TOPIC in record_type else LinkType.GROUP
-            log.info(f'链接:"{link}"解析为"{link_type}",媒体数量:"{len(group_message)}"。')
+            log.info(f'連結:"{link}"解析為"{link_type}",媒體數量:"{len(group_message)}"。')
             return {
                 'link_type': link_type,
                 'chat_id': chat_id,
                 'message': group_message,
                 'member_num': len(group_message)
             }
-    elif is_group is False and group_message is None:  # 单文件。
+    elif is_group is False and group_message is None:  # 單檔案。
         link_type = LinkType.TOPIC if LinkType.TOPIC in record_type else LinkType.SINGLE
-        log.info(f'链接:"{link}"解析为"{link_type}",媒体数量:"1"。')
+        log.info(f'連結:"{link}"解析為"{link_type}",媒體數量:"1"。')
         return {
             'link_type': link_type,
             'chat_id': chat_id,
@@ -255,7 +255,7 @@ async def __is_group(message) -> Tuple[Union[bool, None], Union[list, None]]:
     try:
         return True, await message.get_media_group()
     except ValueError:
-        return False, None  # v1.0.4 修改单文件无法下载问题。
+        return False, None  # v1.0.4 修改單檔案無法下載問題。
     except AttributeError:
         return None, None
 
@@ -321,23 +321,23 @@ async def format_chat_link(
     len_parts: int = len(parts)
     result: Union[str, None] = None
     if len_parts > 3 and topic is False:
-        # 判断是否是/c/类型的频道链接(确保是独立的'c'部分)。
-        if parts[3] == 'c' and len_parts >= 5:  # 对于/c/类型。
+        # 判斷是否是/c/類型的頻道連結(確保是獨立的'c'部分)。
+        if parts[3] == 'c' and len_parts >= 5:  # 對於/c/類型。
             if len_parts >= 6:
-                # 6个部分时,保留前5个部分 (去掉最后一个)。
+                # 6個部分時,保留前5個部分 (去掉最後一個)。
                 result = '/'.join(parts[:5])  # https://t.me/c/2530641322/1 -> https://t.me/c/2530641322
 
-        else:  # 对于普通类型。
+        else:  # 對於普通類型。
             if len_parts >= 5:
-                # 5个部分时,保留前4个部分(去掉最后一个)。
+                # 5個部分時,保留前4個部分(去掉最後一個)。
                 result = '/'.join(parts[:4])  # https://t.me/customer/144 -> https://t.me/customer
-    else:  # 话题格式化。
-        if parts[3] == 'c' and len_parts >= 5:  # 对于/c/类型。
+    else:  # 話題格式化。
+        if parts[3] == 'c' and len_parts >= 5:  # 對於/c/類型。
             if len_parts >= 7:
-                # 7个部分时,保留前6个部分(去掉最后一个)。
+                # 7個部分時,保留前6個部分(去掉最後一個)。
                 result = '/'.join(parts[:6])  # https://t.me/c/2495197831/100/200 -> https://t.me/c/2495197831/100
         elif len_parts >= 6:
-            # 6个部分时,保留前5个部分(去掉最后一个)。
+            # 6個部分時,保留前5個部分(去掉最後一個)。
             result = '/'.join(parts[:5])  # https://t.me/customer/5/1 -> https://t.me/customer/5
 
     return result if result else link
@@ -351,7 +351,7 @@ async def get_my_id(client: pyrogram.Client) -> int:
 def get_local_ip() -> str:
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         try:
-            sock.connect(('10.255.255.255', 1))  # 不发送数据，仅让内核选择出口网卡。
+            sock.connect(('10.255.255.255', 1))  # 不發送資料，僅讓內核選擇出口網卡。
             return sock.getsockname()[0]
         except OSError:
             return '127.0.0.1'
@@ -383,7 +383,7 @@ async def delete_own_message(
         elif isinstance(result, raw.types.Updates):
             updates: list = list(result.updates)
         for update in updates:
-            # StartBot返回的是Updates组合类型,自己发出的消息id由UpdateMessageID按random_id给出。
+            # StartBot返回的是Updates組合類型,自己發出的訊息id由UpdateMessageID按random_id給出。
             if isinstance(update, raw.types.UpdateMessageID):
                 if not random_id or update.random_id == random_id:
                     message_id = update.id
@@ -391,7 +391,7 @@ async def delete_own_message(
             if isinstance(update, raw.types.UpdateNewMessage) and getattr(update.message, 'out', False):
                 message_id = getattr(update.message, 'id', 0)
                 break
-        if not message_id:  # 服务端未生成自己的消息时无可删除内容。
+        if not message_id:  # 伺服器端未生成自己的訊息時無可刪除內容。
             return False
         await client.invoke(
             raw.functions.messages.DeleteMessages(id=[message_id], revoke=False)
@@ -402,8 +402,8 @@ async def delete_own_message(
 
 
 def parse_referral(link: str) -> tuple:
-    """按固定格式"t.me/用户名?start=启动参数"解析链接,返回"用户名"与"启动参数"。"""
-    link: str = str(link).strip().split('://')[-1]  # 去掉协议。
+    """按固定格式"t.me/用戶名稱?start=啟動參數"解析連結,返回"用戶名稱"與"啟動參數"。"""
+    link: str = str(link).strip().split('://')[-1]  # 去掉協議。
     link: str = link.split('/', 1)[-1]  # 去掉域名。
     if '?start=' not in link:
         raise ValueError(f'Unexpected referral link: "{link}"')
@@ -415,13 +415,13 @@ def check_update(
         remote_version: str,
         local_version: str
 ) -> str:
-    """按"主版本.次版本.修订号"逐段比较版本号,远程版本更高时返回该版本号,否则返回空字符串。"""
+    """按"主版本.次版本.修訂號"逐段比較版本號,遠端版本更高時返回該版本號,否則返回空字串。"""
     if not isinstance(remote_version, str) or not isinstance(local_version, str):
         return ''
-    # 只取数字段参与比较,忽略前后缀,保证"v2.0.1"与"2.0.1"等价。
+    # 只取數字段參與比較,忽略前後綴,保證"v2.0.1"與"2.0.1"等價。
     remote: list = [int(i) for i in re.findall(pattern=r'\d+', string=remote_version)]
     local: list = [int(i) for i in re.findall(pattern=r'\d+', string=local_version)]
-    # 位数不足时补0,保证"2.0"与"2.0.0"等价。
+    # 位數不足時補0,保證"2.0"與"2.0.0"等價。
     size: int = max(len(remote), len(local))
     remote += [0] * (size - len(remote))
     local += [0] * (size - len(local))
@@ -496,24 +496,24 @@ def gen_random_credential() -> dict:
 
 
 def gen_random_token(length: int = 32) -> str:
-    """生成指定长度的随机令牌。"""
+    """生成指定長度的隨機令牌。"""
     chars: str = string.ascii_letters + string.digits
     return ''.join(random.choices(chars, k=length))
 
 
 def reset_web_session() -> str:
-    """重新生成并持久化网页面板的令牌,使此前下发的Cookie全部失效。"""
+    """重新生成並持久化網頁面板的令牌,使此前下發的Cookie全部失效。"""
     token: str = gen_random_token()
     try:
         with open(file=TRMD_WEB_SESSION, mode='w', encoding='UTF-8') as f:
             f.write(token)
     except OSError as e:
-        log.warning(f'重置网页面板令牌失败,原因:"{e}"。')
+        log.warning(f'重置網頁面板令牌失敗,原因:"{e}"。')
     return token
 
 
 def get_web_session() -> str:
-    """读取网页面板令牌,不存在时生成并持久化,以便浏览器在软件重启后依然免密。"""
+    """讀取網頁面板令牌,不存在時生成並持久化,以便瀏覽器在軟件重啟後依然免密。"""
     try:
         with open(file=TRMD_WEB_SESSION, mode='r', encoding='UTF-8') as f:
             token: str = f.read().strip()
@@ -525,24 +525,24 @@ def get_web_session() -> str:
     try:
         with open(file=TRMD_WEB_SESSION, mode='w', encoding='UTF-8') as f:
             f.write(token)
-        log.info(f'已生成网页面板令牌:"{TRMD_WEB_SESSION}"。')
+        log.info(f'已生成網頁面板令牌:"{TRMD_WEB_SESSION}"。')
     except OSError as e:
-        log.warning(f'保存网页面板令牌失败,原因:"{e}"。')
+        log.warning(f'儲存網頁面板令牌失敗,原因:"{e}"。')
     return token
 
 
 def is_nuitka() -> bool:
-    """检查是否处于Nuitka编译环境。"""
+    """檢查是否處於Nuitka編譯環境。"""
     return '__compiled__' in globals()
 
 
 def is_pyinstaller() -> bool:
-    """检查是否处于Pyinstaller编译环境。"""
+    """檢查是否處於Pyinstaller編譯環境。"""
     return bool(getattr(sys, 'frozen', False))
 
 
 def is_frozen() -> bool:
-    """检查是否处于打包(冻结)环境,兼容Nuitka与Pyinstaller。"""
+    """檢查是否處於打包(凍結)環境,相容Nuitka與Pyinstaller。"""
     return is_pyinstaller() or is_nuitka()
 
 
@@ -555,27 +555,27 @@ def get_nuitka_version():
 
 def check_environment():
     log.info(f'{SOFTWARE_SHORT_NAME}:{VERSION_SEMVER},更新日期:{__update_date__}。')
-    log.info(f'文件日志等级:"{logging.getLevelName(FILE_LOG_LEVEL)}"。')
-    log.info(f'终端日志等级:"{logging.getLevelName(CONSOLE_LOG_LEVEL)}"。')
-    log.info(f'获取工作目录:"{get_work_directory()}"。')
+    log.info(f'檔案日誌等級:"{logging.getLevelName(FILE_LOG_LEVEL)}"。')
+    log.info(f'終端機日誌等級:"{logging.getLevelName(CONSOLE_LOG_LEVEL)}"。')
+    log.info(f'取得工作目錄:"{get_work_directory()}"。')
     if is_nuitka():
-        log.info(f'检测到"__compiled__",当前运行于"Nuitka"编译产物中,版本:{get_nuitka_version()}。')
+        log.info(f'檢測到"__compiled__",目前執行於"Nuitka"編譯產物中,版本:{get_nuitka_version()}。')
     elif is_pyinstaller():
-        log.info('检测到"sys.frozen",当前运行于"PyInstaller"打包产物中。')
+        log.info('檢測到"sys.frozen",目前執行於"PyInstaller"打包產物中。')
     elif is_docker():
-        log.info('检测到"Docker"容器标识,当前运行于"Docker"容器中。')
+        log.info('檢測到"Docker"容器標識,目前執行於"Docker"容器中。')
     else:
-        log.info('当前运行于"源码"环境中。')
+        log.info('目前執行於"源碼"環境中。')
 
 
 def get_work_directory() -> str:
-    """获取工作目录,打包环境取原始可执行文件所在目录,源码环境取入口脚本所在目录。"""
-    if is_frozen():  # 单文件打包(Nuitka/Pyinstaller)会把文件解压到临时目录运行,sys.executable/__file__ 均可能指向临时目录。
-        if is_nuitka():  # Nuitka单文件:sys.executable指向临时解压目录,只有 sys.argv[0] 才是原始exe真实路径。
+    """取得工作目錄,打包環境取原始可執行檔案所在目錄,源碼環境取入口腳本所在目錄。"""
+    if is_frozen():  # 單檔案打包(Nuitka/Pyinstaller)會把檔案解壓到臨時目錄執行,sys.executable/__file__ 均可能指向臨時目錄。
+        if is_nuitka():  # Nuitka單檔案:sys.executable指向臨時解壓目錄,只有 sys.argv[0] 才是原始exe真實路徑。
             exe_path: str = sys.argv[0]
         else:
-            exe_path: str = sys.executable  # noqa, PyInstaller单文件:sys.executable即原始exe真实路径(sys._MEIPASS才是临时目录)。
-            if not os.path.dirname(exe_path):  # 经PATH启动导致sys.executable仅为命令名(无目录)时,回退到 sys.argv[0]。
+            exe_path: str = sys.executable  # noqa, PyInstaller單檔案:sys.executable即原始exe真實路徑(sys._MEIPASS才是臨時目錄)。
+            if not os.path.dirname(exe_path):  # 經PATH啟動導致sys.executable僅為命令名(無目錄)時,回退到 sys.argv[0]。
                 exe_path = sys.argv[0]
         work_directory: str = os.path.dirname(os.path.abspath(exe_path))
     else:
@@ -584,25 +584,25 @@ def get_work_directory() -> str:
 
 
 def is_docker() -> bool:
-    """检查是否在Docker容器中运行。"""
-    # 检查/.dockerenv文件是否存在。 # noqa.
+    """檢查是否在Docker容器中執行。"""
+    # 檢查/.dockerenv檔案是否存在。 # noqa.
     if os.path.exists('/.dockerenv'):  # noqa.
-        log.debug('检测到"/.dockerenv",当前运行于"Docker"容器中。')  # noqa.
+        log.debug('檢測到"/.dockerenv",目前執行於"Docker"容器中。')  # noqa.
         return True
 
-    # 检查/proc/1/cgroup中是否包含"docker"。
+    # 檢查/proc/1/cgroup中是否包含"docker"。
     try:
         with open('/proc/1/cgroup', 'r') as f:
             content: str = f.read()
             if 'docker' in content or 'kubepods' in content:
-                log.debug('检测到"/proc/1/cgroup"容器标识,当前运行于"Docker"容器中。')
+                log.debug('檢測到"/proc/1/cgroup"容器標識,目前執行於"Docker"容器中。')
                 return True
     except (FileNotFoundError, IOError):
         pass
     except Exception:  # noqa.
         pass
 
-    log.debug('未检测到容器标识,当前运行于非"Docker"环境。')
+    log.debug('未檢測到容器標識,目前執行於非"Docker"環境。')
     return False
 
 
@@ -613,20 +613,20 @@ def ctrl_c():
         return None
     else:
         try:
-            console.input('请按「Enter」键继续. . .')
+            console.input('請按「Enter」鍵繼續. . .')
         except KeyboardInterrupt:
             pass
 
 
 def get_message_dtype(message, download_type: Optional[list] = None) -> Union[str, None]:
-    """判定消息的媒体类型,实况照片是否优先取决于下载配置。"""
+    """判定訊息的媒體類型,實況照片是否優先取決於下載設定。"""
     if getattr(message, DownloadType.LIVE_PHOTO, None):
-        # 实况照片消息同时含照片与视频:配置了实况照片则优先,否则退回按普通照片处理。
+        # 實況照片訊息同時含照片與影片:設定了實況照片則優先,否則退回按普通照片處理。
         if download_type is None or DownloadType.LIVE_PHOTO in download_type:
             return DownloadType.LIVE_PHOTO
         if DownloadType.PHOTO in download_type:
             return DownloadType.PHOTO
-        return DownloadType.LIVE_PHOTO  # 配置不含实况图片和图片时,仍返回实况图片类型,以便正确显示跳过提示。
+        return DownloadType.LIVE_PHOTO  # 設定不含實況圖片和圖片時,仍返回實況圖片類型,以便正確顯示跳過提示。
     for dtype in DownloadType():
         if dtype != DownloadType.LIVE_PHOTO and getattr(message, dtype, None):
             return dtype
@@ -634,45 +634,45 @@ def get_message_dtype(message, download_type: Optional[list] = None) -> Union[st
 
 
 class LimitCall:  # https://github.com/tangyoha/telegram_media_downloader/blob/master/module/app.py#L246
-    """限制单位时间内的调用次数。"""
+    """限制單位時間內的調用次數。"""
 
     def __init__(self, max_limit_call_times: int = 0):
-        # 时间窗口的长度,单位为秒。
+        # 時間視窗的長度,單位為秒。
         self.time_window: int = 60
-        # 时间窗口内允许的最大调用次数。
+        # 時間視窗內允許的最大調用次數。
         self.max_limit_call_times: int = max_limit_call_times
-        # 当前时间窗口内已经调用的次数。
+        # 目前時間視窗內已經調用的次數。
         self.limit_call_times: int = 0
-        # 当前时间窗口的开始时间。
+        # 目前時間視窗的開始時間。
         self.last_call_time: float = 0
 
     async def wait(self):
-        """达到时间窗口内的最大调用次数时,等待至下一个时间窗口。"""
+        """達到時間視窗內的最大調用次數時,等待至下一個時間視窗。"""
         waiting = False
         wait_time = 0.0
         while True:
             now = time.time()
             time_span = now - self.last_call_time
-            # 超过时间窗口则重置计数,重新开始计时。
+            # 超過時間視窗則重置計數,重新開始計時。
             if time_span > self.time_window:
                 self.limit_call_times = 0
                 self.last_call_time = now
 
             if self.limit_call_times + 1 <= self.max_limit_call_times:
                 self.limit_call_times += 1
-                # 等待结束后提示一次,继续请求。
+                # 等待結束後提示一次,繼續請求。
                 if waiting:
                     console.log(
-                        f'已等待{int(now - wait_time)}秒,继续请求。',
+                        f'已等待{int(now - wait_time)}秒,繼續請求。',
                         style='#FF4689'
                     )
                 break
 
             if not waiting:
-                waiting = True  # 达到上限时只提示一次,避免每秒重复打印。
+                waiting = True  # 達到上限時只提示一次,避免每秒重複列印。
                 wait_time = now
                 console.log(
-                    f'请求已达每分钟{self.max_limit_call_times}次的上限,等待{int(self.time_window - time_span) + 1}秒后继续。',
+                    f'請求已達每分鐘{self.max_limit_call_times}次的上限,等待{int(self.time_window - time_span) + 1}秒後繼續。',
                     style='#FF4689'
                 )
 
@@ -680,5 +680,5 @@ class LimitCall:  # https://github.com/tangyoha/telegram_media_downloader/blob/m
 
 
 class Issues:
-    PROXY_NOT_CONFIGURED = '[#79FCD4]代理配置方法[/#79FCD4][#FF79D4]请访问:[/#FF79D4]\n[link=https://github.com/Gentlesprite/Telegram_Restricted_Media_Downloader/wiki#问题14-error-运行出错原因0-keyerror-0]https://github.com/Gentlesprite/Telegram_Restricted_Media_Downloader/wiki#问题14-error-运行出错原因0-keyerror-0[/link]\n[#FCFF79]若[/#FCFF79][#FF4689]无法[/#FF4689][#FF7979]访问[/#FF7979][#79FCD4],[/#79FCD4][#FCFF79]可[/#FCFF79][#d4fc79]查阅[/#d4fc79][#FC79A5]软件压缩包所提供的[/#FC79A5][#79E2FC]"使用手册"[/#79E2FC][#79FCD4]文件夹下的[/#79FCD4][#FFB579]"常见问题及解决方案汇总.pdf"[/#FFB579][#79FCB5]中的[/#79FCB5][#D479FC]【问题14】[/#D479FC][#FCE679]进行操作[/#FCE679][#FC79A6]。[/#FC79A6]'
-    SYSTEM_TIME_NOT_SYNCHRONIZED = '[#FCFF79]检测到[/#FCFF79][#FF7979]系统时间[/#FF7979][#FC79A5]未同步[/#FC79A5][#79E2FC],[/#79E2FC][#79FCD4]解决方法[/#79FCD4][#FF79D4]请访问:[/#FF79D4]\nhttps://github.com/Gentlesprite/Telegram_Restricted_Media_Downloader/issues/5#issuecomment-2580677184\n[#FCFF79]若[/#FCFF79][#FF4689]无法[/#FF4689][#FF7979]访问[/#FF7979][#79FCD4],[/#79FCD4][#FCFF79]可[/#FCFF79][#d4fc79]查阅[/#d4fc79][#FC79A5]软件压缩包所提供的[/#FC79A5][#79E2FC]"使用手册"[/#79E2FC][#79FCB5]中的[/#79FCB5][#D479FC]【问题4】[/#D479FC][#FCE679]进行操作[/#FCE679][#FC79A6],[/#FC79A6][#79FCD4]并[/#79FCD4][#79FCB5]重启软件[/#79FCB5]。'
+    PROXY_NOT_CONFIGURED = '[#79FCD4]代理設定方法[/#79FCD4][#FF79D4]請存取:[/#FF79D4]\n[link=https://github.com/Gentlesprite/Telegram_Restricted_Media_Downloader/wiki#問題14-error-執行出錯原因0-keyerror-0]https://github.com/Gentlesprite/Telegram_Restricted_Media_Downloader/wiki#問題14-error-執行出錯原因0-keyerror-0[/link]\n[#FCFF79]若[/#FCFF79][#FF4689]無法[/#FF4689][#FF7979]存取[/#FF7979][#79FCD4],[/#79FCD4][#FCFF79]可[/#FCFF79][#d4fc79]查閱[/#d4fc79][#FC79A5]軟件壓縮包所提供的[/#FC79A5][#79E2FC]"使用手冊"[/#79E2FC][#79FCD4]資料夾下的[/#79FCD4][#FFB579]"常見問題及解決方案彙總.pdf"[/#FFB579][#79FCB5]中的[/#79FCB5][#D479FC]【問題14】[/#D479FC][#FCE679]進行操作[/#FCE679][#FC79A6]。[/#FC79A6]'
+    SYSTEM_TIME_NOT_SYNCHRONIZED = '[#FCFF79]檢測到[/#FCFF79][#FF7979]系統時間[/#FF7979][#FC79A5]未同步[/#FC79A5][#79E2FC],[/#79E2FC][#79FCD4]解決方法[/#79FCD4][#FF79D4]請存取:[/#FF79D4]\nhttps://github.com/Gentlesprite/Telegram_Restricted_Media_Downloader/issues/5#issuecomment-2580677184\n[#FCFF79]若[/#FCFF79][#FF4689]無法[/#FF4689][#FF7979]存取[/#FF7979][#79FCD4],[/#79FCD4][#FCFF79]可[/#FCFF79][#d4fc79]查閱[/#d4fc79][#FC79A5]軟件壓縮包所提供的[/#FC79A5][#79E2FC]"使用手冊"[/#79E2FC][#79FCB5]中的[/#79FCB5][#D479FC]【問題4】[/#D479FC][#FCE679]進行操作[/#FCE679][#FC79A6],[/#FC79A6][#79FCD4]並[/#79FCD4][#79FCB5]重啟軟件[/#79FCB5]。'

@@ -42,7 +42,7 @@ class ChatInfo:
 
     @staticmethod
     def add(chat: Union[pyrogram.types.Chat, None], chat_id: Union[str, int, None] = None) -> None:
-        """缓存频道的标题,避免网页面板只显示频道ID。"""
+        """快取頻道的標題,避免網頁面板只顯示頻道ID。"""
         if chat is None:
             return
         _chat_id: str = str(chat_id if chat_id is not None else getattr(chat, 'id', ''))
@@ -52,16 +52,16 @@ class ChatInfo:
 
     @staticmethod
     def get(chat_id: Union[str, int, None]) -> str:
-        """获取缓存的频道标题,不存在时返回空字符串。"""
+        """取得快取的頻道標題,不存在時返回空字串。"""
         return ChatInfo.TITLE.get(str(chat_id), '')
 
 
 class DownloadTask:
-    """下载任务,按链接维护待下载的消息与其下载进度统计。"""
+    """下載任務,按連結維護待下載的訊息與其下載進度統計。"""
 
-    TASKS: dict = {}  # 链接 -> DownloadTask。
-    ORDER: list = []  # 链接首次出现的顺序,调度器按此顺序派发。
-    DOWNLOADING_KEYS: set = set()  # (chat_id, message_id) -> 正在下载中的消息,防止不同链接(如媒体组与组内单条?single)并发下载同一消息导致数据竞争。
+    TASKS: dict = {}  # 連結 -> DownloadTask。
+    ORDER: list = []  # 連結首次出現的順序,調度器按此順序派發。
+    DOWNLOADING_KEYS: set = set()  # (chat_id, message_id) -> 正在下載中的訊息,防止不同連結(如媒體組與組內單條?single)併發下載同一訊息導致資料競爭。
 
     def __init__(self, link: Union[str, int]):
         self.link: str = str(link)
@@ -71,18 +71,19 @@ class DownloadTask:
         self.complete_num: int = 0
         self.file_name: set = set()
         self.error_msg: dict = {}
-        self.fail_id: set = set()  # 已彻底失败(重试耗尽)的消息ID。
-        self.items: dict = {}  # 消息ID -> 待下载消息(dict,字段见add_item)。
-        self.member_info: dict = {}  # 消息ID -> 该链接下消息的展示信息与状态,完成后不移除。
+        self.fail_id: set = set()  # 已徹底失敗(重試耗盡)的訊息ID。
+        self.items: dict = {}  # 訊息ID -> 待下載訊息(dict,字段見add_item)。
+        self.messages: dict = {}  # 訊息ID -> 原始訊息,供網頁面板重試。
+        self.member_info: dict = {}  # 訊息ID -> 該連結下訊息的展示資訊與狀態,完成後不移除。
 
     @property
     def fail_num(self) -> int:
-        """彻底失败(重试耗尽)的文件数。"""
+        """徹底失敗(重試耗盡)的檔案數。"""
         return len(self.fail_id)
 
     @classmethod
     def get_or_create(cls, link: Union[str, int]) -> 'DownloadTask':
-        """获取链接对应的下载任务,不存在时创建并记录顺序。"""
+        """取得連結對應的下載任務,不存在時建立並記錄順序。"""
         _link: str = str(link)
         task: Union[DownloadTask, None] = cls.TASKS.get(_link)
         if task is None:
@@ -93,12 +94,12 @@ class DownloadTask:
 
     @classmethod
     def get(cls, link: Union[str, int, None]) -> Union['DownloadTask', None]:
-        """获取链接对应的下载任务。"""
+        """取得連結對應的下載任務。"""
         return cls.TASKS.get(str(link))
 
     @classmethod
     def ordered_tasks(cls) -> list:
-        """按链接首次出现的顺序返回下载任务。"""
+        """按連結首次出現的順序返回下載任務。"""
         return [cls.TASKS[link] for link in list(cls.ORDER) if link in cls.TASKS]
 
     @classmethod
@@ -112,25 +113,26 @@ class DownloadTask:
             with_upload: Optional[dict] = None,
             diy_download_type: Optional[list] = None
     ) -> None:
-        """将消息加入下载任务,已存在时重置为排队状态。"""
+        """將訊息加入下載任務,已存在時重置為排隊狀態。"""
         task: DownloadTask = cls.get_or_create(link)
         messages: list = message if isinstance(message, list) else [message]
         retry_dict: dict = retry if retry else {'id': -1, 'count': 0}
         retry_id: int = int(retry_dict.get('id') or -1)
         retry_count: int = int(retry_dict.get('count') or 0)
         if retry_count == 0:
-            task.clear_error()  # 非重试(重新拉取)的任务,清空该链接此前的失败记录。
+            task.clear_error()  # 非重試(重新拉取)的任務,清空該連結此前的失敗記錄。
             task.clear_fail()
         for _message in messages:
             key: int = int(getattr(_message, 'id', 0))
+            task.messages[key] = _message
             if retry_count != 0 and key != retry_id:
-                continue  # 重试时只保留需要重试的那条消息,避免整个媒体组被重复排队。
-            task.remove_fail(message_id=key)  # 重新排队(含重试)时,清除该消息的失败记录。
+                continue  # 重試時只保留需要重試的那條訊息,避免整個媒體組被重複排隊。
+            task.remove_fail(message_id=key)  # 重新排隊(含重試)時,清除該訊息的失敗記錄。
             existing: Union[dict, None] = task.items.get(key)
             current_status: Optional[str] = existing.get('status') if existing else None
-            # 正在下载中的消息不降级为排队:避免面板把"下载中"误显示为"队列中",也避免被调度器重复拉起。
-            # 例外: 若该消息已无活动下载协程占用(DOWNLOADING_KEYS不含其键, 说明此前崩溃/被强杀后未回写终态)。
-            # 则视为孤儿并恢复为排队,避免重拉链接时永久卡在DOWNLOADING。
+            # 正在下載中的訊息不降級為排隊:避免面板把"下載中"誤顯示為"佇列中",也避免被調度器重複拉起。
+            # 例外: 若該訊息已無活動下載協程佔用(DOWNLOADING_KEYS不含其鍵, 說明此前崩潰/被強殺後未回寫終態)。
+            # 則視為孤兒並恢復為排隊,避免重拉鍊接時永久卡在DOWNLOADING。
             dl_key = (_message.chat.id, key) if getattr(_message, 'chat', None) else None
             orphan_downloading: bool = (
                     current_status == DownloadStatus.DOWNLOADING
@@ -138,9 +140,9 @@ class DownloadTask:
                     and dl_key not in cls.DOWNLOADING_KEYS
             )
             if orphan_downloading:
-                cls.DOWNLOADING_KEYS.discard(dl_key)  # 防御性清理可能残留的占用标记。
+                cls.DOWNLOADING_KEYS.discard(dl_key)  # 防禦性清理可能殘留的佔用標記。
             re_enqueue: bool = current_status != DownloadStatus.DOWNLOADING or orphan_downloading
-            task.update_member(  # 登记链接成员,包括下载完成后仍需展示的消息。
+            task.update_member(  # 登記連結成員,包括下載完成後仍需展示的訊息。
                 message_id=key,
                 status=DownloadStatus.PENDING if re_enqueue else None,
                 date=str(getattr(_message, 'date', '') or '')[:10]
@@ -157,14 +159,19 @@ class DownloadTask:
                     'diy_download_type': diy_download_type,
                     'status': DownloadStatus.PENDING,
                     'create_time': time.time(),
-                    'meta': None  # 网页面板的展示信息缓存。
+                    'meta': None,  # 網頁面板的展示資訊快取。
+                    'pause_requested': False,
+                    'cancel_requested': False,
+                    'future': None
                 }
             elif re_enqueue:
-                item['status'] = DownloadStatus.PENDING  # 重试时重置状态。
-            # 正在下载中(re_enqueue 为 False)时保留原状态,不做降级。
+                item['status'] = DownloadStatus.PENDING  # 重試時重置狀態。
+                item['pause_requested'] = False
+                item['cancel_requested'] = False
+            # 正在下載中(re_enqueue 為 False)時保留原狀態,不做降級。
 
     def set_item_status(self, message_id: Union[int, str], status: str) -> None:
-        """设置指定消息的排队状态,并同步到链接成员。"""
+        """設定指定訊息的排隊狀態,並同步到連結成員。"""
         item: Union[dict, None] = self.items.get(int(message_id))
         if item is not None:
             item['status'] = status
@@ -181,10 +188,10 @@ class DownloadTask:
             task_id: Optional[int] = None,
             note: Optional[str] = None
     ) -> None:
-        """登记或更新链接下某个消息成员的展示信息与状态。"""
+        """登記或更新連結下某個訊息成員的展示資訊與狀態。"""
         key: int = int(message_id)
         member: dict = self.member_info.get(key) or {
-            'name': f'消息 {key}',
+            'name': f'訊息 {key}',
             'size': '',
             'size_byte': 0,
             'date': '',
@@ -209,17 +216,17 @@ class DownloadTask:
         self.member_info[key] = member
 
     def remove_item(self, message_id: Union[int, str]) -> None:
-        """从下载任务中移除指定的消息。"""
+        """從下載任務中移除指定的訊息。"""
         self.items.pop(int(message_id), None)
 
     def get_pending_items(self, limit: int = 50) -> dict:
-        """获取该下载任务中排队(PENDING)的消息。"""
+        """取得該下載任務中排隊(PENDING)的訊息。"""
         items: list = [item for item in self.items.values() if item.get('status') == DownloadStatus.PENDING]
         return {'items': items[:limit], 'total': len(items)}
 
     @classmethod
     def queued_items(cls, limit: int = 50) -> list:
-        """获取尚未开始下载(PENDING)的消息。"""
+        """取得尚未開始下載(PENDING)的訊息。"""
         result: list = []
         for task in cls.ordered_tasks():
             for item in task.items.values():
@@ -229,9 +236,9 @@ class DownloadTask:
 
     @classmethod
     def pick_pending(cls) -> Union[dict, None]:
-        """按链接首次出现的顺序取出一个排队(PENDING)中的消息。
+        """按連結首次出現的順序取出一個排隊(PENDING)中的訊息。
 
-        若消息已被其他任务占用(正在下载中),则跳过,避免相同消息被多个链接并发下载导致数据竞争。
+        若訊息已被其他任務佔用(正在下載中),則跳過,避免相同訊息被多個連結併發下載導致資料競爭。
         """
         for task in cls.ordered_tasks():
             for item in task.items.values():
@@ -247,23 +254,36 @@ class DownloadTask:
 
     @classmethod
     def has_task(cls) -> bool:
-        """判断是否还存在未处理完毕或未开始的任务。"""
+        """判斷是否還存在未處理完畢或未開始的任務。"""
         for task in cls.ordered_tasks():
             for item in task.items.values():
-                if item.get('status') in (DownloadStatus.PENDING, DownloadStatus.DOWNLOADING):
+                if item.get('status') in (
+                    DownloadStatus.PENDING,
+                    DownloadStatus.DOWNLOADING,
+                    DownloadStatus.PAUSED
+                ):
                     return True
         return False
 
     @classmethod
+    def has_active_task(cls) -> bool:
+        """判斷是否仍有需要在關閉前排空的下載任務。"""
+        return any(
+            item.get('status') in (DownloadStatus.PENDING, DownloadStatus.DOWNLOADING)
+            for task in cls.ordered_tasks()
+            for item in list(task.items.values())
+        )
+
+    @classmethod
     def has_pending_message(cls, message_ids: set, chat_id: Optional[int] = None) -> bool:
-        """判断指定消息中是否仍有处于排队或下载中的项(按消息范围判定,不做全局检查)。
+        """判斷指定訊息中是否仍有處於排隊或下載中的項(按訊息範圍判定,不做全局檢查)。
 
         Args:
-            message_ids: 需要检查的message_id集合(如媒体组全部成员)。
-            chat_id: 原始频道ID。给出时按下载占用键(chat_id, message_id)精确匹配,用于捕捉"同一条消息正被其它链接并发下载中"的情况。
+            message_ids: 需要檢查的message_id集合(如媒體組全部成員)。
+            chat_id: 原始頻道ID。給出時按下載佔用鍵(chat_id, message_id)精確匹配,用於捕捉"同一條訊息正被其它連結併發下載中"的情況。
 
         Returns:
-            存在排队/下载中的成员返回True,否则False。
+            存在排隊/下載中的成員返回True,否則False。
         """
         if chat_id is not None:
             for message_id in message_ids:
@@ -277,36 +297,40 @@ class DownloadTask:
                     message = item.get('message')
                     if not isinstance(message, pyrogram.types.Message) or message.chat.id != chat_id:
                         continue
-                if item.get('status') in (DownloadStatus.PENDING, DownloadStatus.DOWNLOADING):
+                if item.get('status') in (
+                    DownloadStatus.PENDING,
+                    DownloadStatus.DOWNLOADING,
+                    DownloadStatus.PAUSED
+                ):
                     return True
         return False
 
     def add_file_name(self, file_name: str) -> None:
-        """记录已完成的文件名,并同步完成数。"""
+        """記錄已完成的檔案名稱,並同步完成數。"""
         self.file_name.add(file_name)
         self.complete_num = len(self.file_name)
 
     def set_error(self, value, key: Optional[str] = None) -> None:
-        """记录下载错误信息。"""
+        """記錄下載錯誤資訊。"""
         self.error_msg[key if key else 'all_member'] = value
 
     def clear_error(self, key: Optional[str] = None) -> None:
-        """清除下载错误信息,指定key时只清除该文件的失败记录。"""
+        """清除下載錯誤資訊,指定key時只清除該檔案的失敗記錄。"""
         if key is None:
             self.error_msg.clear()
             return
         self.error_msg.pop(key, None)
 
     def add_fail(self, message_id: Union[int, str]) -> None:
-        """记录彻底失败(重试耗尽)的消息。"""
+        """記錄徹底失敗(重試耗盡)的訊息。"""
         self.fail_id.add(int(message_id))
 
     def remove_fail(self, message_id: Union[int, str]) -> None:
-        """移除消息的失败记录,该消息重新排队或下载成功时调用。"""
+        """移除訊息的失敗記錄,該訊息重新排隊或下載成功時調用。"""
         self.fail_id.discard(int(message_id))
 
     def clear_fail(self) -> None:
-        """清空全部失败记录。"""
+        """清空全部失敗記錄。"""
         self.fail_id.clear()
 
     def on_create_task(func):  # noqa.
@@ -360,8 +384,8 @@ class DownloadTask:
                     f'{_t(KeyWord.STATUS)}:{_t(DownloadStatus.SUCCESS)}。'
                 )
                 task.error_msg = {}
-                asyncio.create_task(self.done_notice(f'"{link}"下载完成。'))
-                log.info(f'链接:"{link}"下载完成。')
+                asyncio.create_task(self.done_notice(f'"{link}"下載完成。'))
+                log.info(f'連結:"{link}"下載完成。')
             return res
 
         return wrapper
@@ -373,9 +397,9 @@ class UploadTask:
     TASKS: set = set()
     TASK_COUNTER: int = 0
     NOTIFY: Optional[Callable] = None
-    # 正在上传中的本地文件路径 -> {'event': asyncio.Event, 'media': 已上传媒体的引用或None, 'success': bool}。
-    # 用于同一文件并发上传时,后续任务等待主导任务完成后复用其已上传的媒体引用。
-    # 直接发往自己的频道,避免重复上传与源文件删除竞争(源文件仅由主导任务删除)。
+    # 正在上載中的本機檔案路徑 -> {'event': asyncio.Event, 'media': 已上載媒體的引用或None, 'success': bool}。
+    # 用於同一檔案併發上載時,後續任務等待主導任務完成後複用其已上載的媒體引用。
+    # 直接發往自己的頻道,避免重複上載與源檔案刪除競爭(源檔案僅由主導任務刪除)。
     UPLOADING_KEYS: dict = {}
 
     def __init__(
@@ -394,6 +418,7 @@ class UploadTask:
     ):
         UploadTask.TASKS.add(self)
         UploadTask.TASK_COUNTER += 1
+        self.control_id: int = UploadTask.TASK_COUNTER
         self.chat_id: Union[str, int, None] = chat_id
         self.file_path: str = file_path
         self.file_name: str = os.path.basename(file_path)
@@ -409,7 +434,9 @@ class UploadTask:
         self.send_as_media_group: bool = send_as_media_group
         self.sha256: str = calc_sha256(file_path=self.file_path)
         self.prompt: str = ''
-        self.task_id: Union[int, None] = None  # 进度条任务ID,供网页面板关联上传进度。
+        self.task_id: Union[int, None] = None  # 進度列任務ID,供網頁面板關聯上載進度。
+        self.pause_requested: bool = False
+        self.cancel_requested: bool = False
 
     def __setattr__(self, name, value):
         if name.startswith('_'):
@@ -433,9 +460,9 @@ class UploadTask:
                         elif value == UploadStatus.SUCCESS:
                             more = ''
                             if self.send_as_media_group:
-                                more += f'(等待所有媒体上传完成以媒体组发送)'
+                                more += f'(等待所有媒體上載完成以媒體組發送)'
                             if self.with_delete:
-                                more += '(本地文件已删除)'
+                                more += '(本機檔案已刪除)'
                             console.log(
                                 f'{_t(KeyWord.UPLOAD_TASK)}'
                                 f'{_t(KeyWord.CHANNEL)}:"{self.chat_id}",'
@@ -443,7 +470,7 @@ class UploadTask:
                                 f'{_t(KeyWord.SIZE)}:{MetaData.suitable_units_display(self.file_size)},'
                                 f'{_t(KeyWord.STATUS)}:{_t(UploadStatus.SUCCESS)}{more}。',
                             )
-                            self.notice(f'"{self.file_path}" ⬆️ "{self.chat_id}"上传完成。\n{more}')
+                            self.notice(f'"{self.file_path}" ⬆️ "{self.chat_id}"上載完成。\n{more}')
                         elif value == UploadStatus.SENT:
                             pass
                         elif value == UploadStatus.FAILURE:
@@ -455,7 +482,7 @@ class UploadTask:
                                 f'{_t(KeyWord.REASON)}:"{self.error_msg}",'
                                 f'{_t(KeyWord.STATUS)}:{_t(str(value))}。'
                             )
-                            self.notice(f'"{self.file_path}" ⬆️ "{self.chat_id}"上传失败。')
+                            self.notice(f'"{self.file_path}" ⬆️ "{self.chat_id}"上載失敗。')
                     elif name == 'chat_id':
                         if value:
                             self.upload_manager_path: str = os.path.join(
@@ -519,7 +546,7 @@ class UploadTask:
             try:
                 _json = json.load(f)
             except Exception as e:
-                log.info(f'UploadManager的json内容可能为空,即将重新生成,{_t(KeyWord.REASON)}:"{e}"')
+                log.info(f'UploadManager的json內容可能為空,即將重新生成,{_t(KeyWord.REASON)}:"{e}"')
                 safe_delete(self.upload_manager_path)
                 self.save_json()
         self.file_id = _json.get('file_id', self.file_id)
@@ -533,7 +560,7 @@ class UploadTask:
             self.save_json()
 
     def reset_upload(self, file_id: int):
-        """丢弃历史分片缓存,改用新的file_id重新上传全部分片。"""
+        """丟棄歷史分片快取,改用新的file_id重新上載全部分片。"""
         self.file_id = file_id
         self.file_part = []
         self.save_json()
@@ -543,29 +570,33 @@ class UploadTask:
             message_ids: Optional[set] = None,
             origin_chat_id: Optional[int] = None
     ) -> bool:
-        """检查是否还有PENDING/UPLOADING状态且属于媒体组的上传任务,或本媒体组成员仍在下载中。
-        仅判断上传队列不足以判定媒体组是否已齐:某成员可能仍处于下载阶段、尚未生成上传任务,此时若判定为"无待处理"会提前发出不完整的相册,因此同时检查下载任务。
+        """檢查是否還有PENDING/UPLOADING狀態且屬於媒體組的上載任務,或本媒體組成員仍在下載中。
+        僅判斷上載佇列不足以判定媒體組是否已齊:某成員可能仍處於下載階段、尚未生成上載任務,此時若判定為"無待處理"會提前發出不完整的相冊,因此同時檢查下載任務。
         Args:
-            message_ids: 本媒体组成员的message_id集合。给出时只检查这些消息的下载状态,避免被无关的下载任务拖住;不给出则退化为全局检查。
-            origin_chat_id: 原始频道ID,配合message_ids精确匹配下载占用键。
+            message_ids: 本媒體組成員的message_id集合。給出時只檢查這些訊息的下載狀態,避免被無關的下載任務拖住;不給出則退化為全局檢查。
+            origin_chat_id: 原始頻道ID,配合message_ids精確匹配下載佔用鍵。
         """
         for task in UploadTask.TASKS:
-            if task.status in (UploadStatus.PENDING, UploadStatus.UPLOADING) and task.is_media_group:
+            if task.status in (
+                UploadStatus.PENDING,
+                UploadStatus.UPLOADING,
+                UploadStatus.PAUSED
+            ) and task.is_media_group:
                 return True
-        # 同时检查本媒体组成员是否仍在下载中(PENDING/DOWNLOADING),避免成员还在下载就被误判为已齐。
+        # 同時檢查本媒體組成員是否仍在下載中(PENDING/DOWNLOADING),避免成員還在下載就被誤判為已齊。
         if not message_ids:
             return DownloadTask.has_task()
         return DownloadTask.has_pending_message(message_ids=message_ids, chat_id=origin_chat_id)
 
     @staticmethod
     def get_media_group_task_count(message_ids: set) -> int:
-        """获取指定media_group_id和message_ids列表中已创建的UploadTask数量。
+        """取得指定media_group_id和message_ids列表中已建立的UploadTask數量。
 
         Args:
-            message_ids: 需要检查的message_id集合。
+            message_ids: 需要檢查的message_id集合。
 
         Returns:
-            int: 已创建的UploadTask数量(排除已发送的任务)。
+            int: 已建立的UploadTask數量(排除已發送的任務)。
         """
         if not message_ids:
             return 0
@@ -578,22 +609,22 @@ class UploadTask:
         return count
 
     def get_missing_parts(self) -> list:
-        """获取缺失的分片索引。"""
+        """取得缺失的分片索引。"""
         valid_parts = []
         for part in self.file_part:
             if isinstance(part, int) and 0 <= part < self.file_total_parts and part not in valid_parts:
                 valid_parts.append(part)
             else:
-                log.info(f'过滤无效分片索引:{part}(有效范围:0-{self.file_total_parts - 1})。')
+                log.info(f'過濾無效分片索引:{part}(有效範圍:0-{self.file_total_parts - 1})。')
 
         if len(valid_parts) != len(self.file_part):
             self.file_part = valid_parts
             self.save_json()
-            log.info(f'清理后的分片索引:{valid_parts}。')
+            log.info(f'清理後的分片索引:{valid_parts}。')
 
         all_parts = set(range(self.file_total_parts))
         uploaded_parts = set(valid_parts)
         missing_parts = sorted(list(all_parts - uploaded_parts))
 
-        log.info(f'总需分片:{all_parts},已上传:{uploaded_parts},缺失:{missing_parts}。')
+        log.info(f'總需分片:{all_parts},已上載:{uploaded_parts},缺失:{missing_parts}。')
         return missing_parts

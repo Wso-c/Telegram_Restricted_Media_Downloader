@@ -1,15 +1,16 @@
 FROM python:3.13.2-slim
 
-# 设置工作目录。
+# 設定工作目錄。
 WORKDIR /app
 
-# 设置环境变量。
+# 設定環境變量。
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     XDG_CONFIG_HOME=/app \
+    TRMD_WEB_HOST=0.0.0.0 \
     TERM=xterm-256color
 
-# 安装系统依赖+Python依赖，编译后清理，全部合并为一个RUN层以减小镜像体积。
+# 安裝系統依賴+Python依賴，編譯後清理，全部合併為一個RUN層以減小鏡像體積。
 COPY requirements.txt .
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -20,21 +21,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get purge -y gcc g++ \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
-# 创建配置目录、下载目录、会话目录、临时目录、可执行程序目录、统计表目录。
+# 建立設定目錄、下載目錄、會話目錄、臨時目錄、可執行程式目錄、統計表目錄。
 RUN mkdir -p /app/TRMD /app/downloads /app/sessions /app/temp /app/form
 
-# 复制项目文件。
+# 複製項目檔案。
 COPY main.py .
 COPY module/ ./module/
 
-# 设置挂载点。
+# 設定掛載點。
 VOLUME ["/app/TRMD", "/app/downloads", "/app/sessions", "/app/temp", "/app/form"]
 
-# 声明网页面板的默认端口。
+# 聲明網頁面板的預設連接埠。
 EXPOSE 2921
 
-# 运行应用。
-# --config: 用户配置存到挂载目录，容器重启不丢失。
-# 网页面板默认启用，端口默认为2921，可通过--port指定。
-# session_directory和temp_directory可在config.yaml中自行配置。
+# 執行應用。
+# --config: 用戶設定存到掛載目錄，容器重啟不丟失。
+# 網頁面板預設啟用，連接埠預設為2921，可通過--port指定。
+# session_directory和temp_directory可在config.yaml中自行設定。
 CMD ["python", "main.py", "--config", "/app/TRMD/config.yaml", "--port", "2921"]

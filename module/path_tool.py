@@ -36,7 +36,7 @@ _mimetypes = mimetypes.MimeTypes()
 
 
 def split_path(path: str) -> dict:
-    """将传入路径拆分为目录名和文件名并以字典形式返回。"""
+    """將傳入路徑拆分為目錄名和檔案名稱並以字典形式返回。"""
     directory, file_name = os.path.split(path)
     return {
         'directory': directory,
@@ -45,22 +45,22 @@ def split_path(path: str) -> dict:
 
 
 def __is_exist(file_path: str) -> bool:
-    """判断文件路径是否存在。"""
+    """判斷檔案路徑是否存在。"""
     return not os.path.isdir(file_path) and os.path.exists(file_path)
 
 
 def compare_file_size(a_size: int, b_size: int) -> bool:
-    """比较文件的大小是否一致。"""
+    """比較檔案的大小是否一致。"""
     return a_size == b_size
 
 
 def is_file_duplicate(save_directory: str, sever_file_size: int) -> bool:
-    """判断文件是否重复。"""
+    """判斷檔案是否重複。"""
     return __is_exist(save_directory) and compare_file_size(os.path.getsize(save_directory), sever_file_size)
 
 
 def validate_title(title: str) -> str:
-    """验证并修改(如果不合法)标题的合法性。"""
+    """驗證並修改(如果不合法)標題的合法性。"""
     r_str = r"[/\\:*?\"<>|\n]"  # '/ \ : * ? " < > |'
     new_title = re.sub(r_str, "_", title)
     return new_title
@@ -68,19 +68,19 @@ def validate_title(title: str) -> str:
 
 def truncate_filename(path: str, limit: int = 230) -> str:
     # https://github.com/tangyoha/telegram_media_downloader/blob/a3a9c2bed89ea8fd4db0b6616f055dfa11208362/utils/format.py#L195
-    """将文件名截断到最大长度。
+    """將檔案名稱截斷到最大長度。
     Parameters
     ----------
     path: str
-        文件名路径
+        檔案名稱路徑
 
     limit: int
-        文件名长度限制（以UTF-8 字节为单位）
+        檔案名稱長度限制（以UTF-8 位元組為單位）
 
     Returns
     -------
     str
-        如果文件名的长度超过限制，则返回截断后的文件名;否则返回原始文件名。
+        如果檔案名稱的長度超過限制，則返回截斷後的檔案名稱;否則返回原始檔案名稱。
     """
     p, f = os.path.split(os.path.normpath(path))
     f, e = os.path.splitext(f)
@@ -91,15 +91,15 @@ def truncate_filename(path: str, limit: int = 230) -> str:
 
 
 def gen_backup_config(old_path: str, absolute_backup_dir: str, error_config: bool = False) -> str:
-    """备份配置文件。"""
+    """備份設定檔。"""
 
     try:
         os.makedirs(absolute_backup_dir, exist_ok=True)
     except PermissionError as e:
-        log.error(f'权限不足,无法创建目录"{absolute_backup_dir}",{_t(KeyWord.REASON)}:"{e}"')
+        log.error(f'權限不足,無法建立目錄"{absolute_backup_dir}",{_t(KeyWord.REASON)}:"{e}"')
         raise SystemExit(1)
     except OSError as e:
-        log.error(f'无法创建目录"{absolute_backup_dir}",{_t(KeyWord.REASON)}:"{e}"')
+        log.error(f'無法建立目錄"{absolute_backup_dir}",{_t(KeyWord.REASON)}:"{e}"')
         raise SystemExit(1)
 
     time_format: str = '%Y-%m-%d_%H-%M-%S'
@@ -113,18 +113,18 @@ def gen_backup_config(old_path: str, absolute_backup_dir: str, error_config: boo
         shutil.move(old_path, new_path)
         return new_path
     except FileNotFoundError as e:
-        log.error(f'源文件"{old_path}"不存在,{_t(KeyWord.REASON)}:"{e}"')
+        log.error(f'源檔案"{old_path}"不存在,{_t(KeyWord.REASON)}:"{e}"')
         raise SystemExit(1)
     except PermissionError as e:
-        log.error(f'权限不足,无法移动"{old_path}"->"{new_path}",{_t(KeyWord.REASON)}:"{e}"')
+        log.error(f'權限不足,無法移動"{old_path}"->"{new_path}",{_t(KeyWord.REASON)}:"{e}"')
         raise SystemExit(1)
     except Exception as e:
-        log.error(f'无法移动"{old_path}"->"{new_path}",{_t(KeyWord.REASON)}:"{e}"')
+        log.error(f'無法移動"{old_path}"->"{new_path}",{_t(KeyWord.REASON)}:"{e}"')
         raise SystemExit(1)
 
 
 def safe_delete(file_p_d: str) -> bool:
-    """删除文件或目录。"""
+    """刪除檔案或目錄。"""
     try:
         if os.path.isdir(file_p_d):
             shutil.rmtree(file_p_d)
@@ -133,22 +133,22 @@ def safe_delete(file_p_d: str) -> bool:
             os.remove(file_p_d)
             return True
         else:
-            log.warning(f'"{file_p_d}"不是有效的文件或目录,无法删除。')
+            log.warning(f'"{file_p_d}"不是有效的檔案或目錄,無法刪除。')
             return False
     except FileNotFoundError:
         return True
     except PermissionError as e:
-        log.error(f'权限不足,无法删除"{file_p_d}",{_t(KeyWord.REASON)}:"{e}"')
+        log.error(f'權限不足,無法刪除"{file_p_d}",{_t(KeyWord.REASON)}:"{e}"')
         return False
     except Exception as e:
-        log.error(f'无法删除"{file_p_d}",{_t(KeyWord.REASON)}:"{e}"', exc_info=True)
+        log.error(f'無法刪除"{file_p_d}",{_t(KeyWord.REASON)}:"{e}"', exc_info=True)
         return False
 
 
 def safe_scan_directory_file(
         directory: str
 ) -> List[str]:
-    """扫描目录下的文件并返回文件名的列表。"""
+    """掃描目錄下的檔案並返回檔案名稱的列表。"""
     with os.scandir(directory) as entries:
         return [entry.name for entry in entries if entry.is_file()]
 
@@ -156,7 +156,7 @@ def safe_scan_directory_file(
 def safe_replace(origin_file: str, overwrite_file: str) -> dict:
     e_code = None
     if not os.path.isfile(origin_file):
-        e_code = f'"{origin_file}"不存在或不是一个文件。'
+        e_code = f'"{origin_file}"不存在或不是一個檔案。'
         return {'e_code': e_code}
 
     try:
@@ -166,40 +166,40 @@ def safe_replace(origin_file: str, overwrite_file: str) -> dict:
             try:
                 shutil.move(origin_file, overwrite_file)
             except Exception as e2:
-                e_code = f'移动文件失败,原因:"{e2}"'
+                e_code = f'移動檔案失敗,原因:"{e2}"'
         else:
-            e_code = f'覆盖文件失败,原因:"{e}"'
+            e_code = f'覆蓋檔案失敗,原因:"{e}"'
 
     return {'e_code': e_code}
 
 
 def move_to_save_directory(temp_file_path: str, save_directory: str) -> dict:
-    """移动文件到指定路径。"""
+    """移動檔案到指定路徑。"""
     try:
         os.makedirs(save_directory, exist_ok=True)
         if os.path.isdir(save_directory):
             file_name: str = split_path(temp_file_path).get('file_name')
             if os.path.exists(os.path.join(save_directory, file_name)):
-                return {'e_code': f'"{file_name}"已存在于保存路径无法移动,请手动解决冲突。'}
+                return {'e_code': f'"{file_name}"已存在於儲存路徑無法移動,請手動解決衝突。'}
             shutil.move(temp_file_path, save_directory)
             return {'e_code': None}
         else:
             save_directory: str = os.path.join(os.getcwd(), 'downloads')
             os.makedirs(save_directory, exist_ok=True)
             shutil.move(temp_file_path, save_directory)
-            return {'e_code': f'"{save_directory}"不是一个目录,已将文件下载到默认目录。'}
+            return {'e_code': f'"{save_directory}"不是一個目錄,已將檔案下載到預設目錄。'}
     except FileExistsError as e:
-        return {'e_code': f'"{save_directory}"已存在,不能重复保存,原因:"{e}'}
+        return {'e_code': f'"{save_directory}"已存在,不能重複儲存,原因:"{e}'}
     except PermissionError as e:
         return {
-            'e_code': f'"{save_directory}"进程无权限访问,可能是文件只读、被其他进程占用锁定或当前用户无写入权限,原因:"{e}"'}
+            'e_code': f'"{save_directory}"進程無權限存取,可能是檔案只讀、被其他進程佔用鎖定或目前用戶無寫入權限,原因:"{e}"'}
     except Exception as e:
-        return {'e_code': f'意外的错误,原因:"{e}"'}
+        return {'e_code': f'意外的錯誤,原因:"{e}"'}
 
 
 def get_extension(file_id: str, mime_type: str, dot: bool = True) -> str:
-    """获取文件的扩展名。
-    更多扩展名见: https://www.iana.org/assignments/media-types/media-types.xhtml
+    """取得檔案的副檔名。
+    更多副檔名見: https://www.iana.org/assignments/media-types/media-types.xhtml
     """
 
     if not file_id:
@@ -221,7 +221,7 @@ def get_extension(file_id: str, mime_type: str, dot: bool = True) -> str:
         if 'video' in mime_type:
             extension = guessed_extension or Extension.VIDEO.get(mime_type, 'mp4')
         elif 'image' in mime_type:
-            extension = guessed_extension or Extension.PHOTO.get(mime_type, 'jpg')  # v1.2.8 修复获取图片格式时,实际指向为视频字典的错误。
+            extension = guessed_extension or Extension.PHOTO.get(mime_type, 'jpg')  # v1.2.8 修復取得圖片格式時,實際指向為影片字典的錯誤。
         else:
             extension = guessed_extension or 'zip'
     elif file_type == FileType.STICKER:
@@ -237,13 +237,13 @@ def get_extension(file_id: str, mime_type: str, dot: bool = True) -> str:
 
 
 def __guess_extension(mime_type: str) -> Optional[str]:
-    """如果扩展名不是None，则从没有点的MIME类型返回中猜测文件扩展名。"""
+    """如果副檔名不是None，則從沒有點的MIME類型返回中猜測檔案副檔名。"""
     extension = _mimetypes.guess_extension(mime_type, strict=True)
     return extension[1:] if extension and extension.startswith('.') else extension
 
 
 def __get_file_type(file_id: str) -> FileType:
-    """获取文件类型。"""
+    """取得檔案類型。"""
     decoded = rle_decode(b64_decode(file_id))
 
     # File id versioning. Major versions lower than 4 don't have a minor version
@@ -262,12 +262,12 @@ def __get_file_type(file_id: str) -> FileType:
     try:
         file_type = FileType(file_type)
     except ValueError as exc:
-        raise ValueError(f'文件ID:"{file_id}",未知的文件类型:"{file_type}"。') from exc
+        raise ValueError(f'檔案ID:"{file_id}",未知的檔案類型:"{file_type}"。') from exc
     return file_type
 
 
 def get_file_size(file_path: str, temp_ext: str = '.temp') -> int:
-    """获取文件大小，支持临时扩展名。"""
+    """取得檔案大小，支援臨時副檔名。"""
     if os.path.exists(file_path):
         return os.path.getsize(file_path)
     elif os.path.exists(file_path + temp_ext):
@@ -283,7 +283,7 @@ def get_mime_from_extension(file_path: str) -> str:
 
 def extract_full_extension(filename: Union[str, None]):
     """
-    提取完整的文件扩展名，支持多段扩展名。
+    提取完整的檔案副檔名，支援多段副檔名。
     """
     if not filename or not isinstance(filename, str):
         return None
@@ -293,9 +293,9 @@ def extract_full_extension(filename: Union[str, None]):
         return None
 
     multi_ext_patterns = [
-        r'\.(7z|rar|zip|r\d+|z\d+|s\d+|t\d+)\.\d+$',  # 压缩文件分卷格式。
-        r'\.(tar|zip|7z|rar)(\.(gz|bz2|xz|zip|7z|rar))+$',  # 多段压缩格式
-        r'\.(tar\.(gz|bz2|xz)|[a-z0-9]+\.\d+)$'  # 常见的多段扩展名
+        r'\.(7z|rar|zip|r\d+|z\d+|s\d+|t\d+)\.\d+$',  # 壓縮檔案分卷格式。
+        r'\.(tar|zip|7z|rar)(\.(gz|bz2|xz|zip|7z|rar))+$',  # 多段壓縮格式
+        r'\.(tar\.(gz|bz2|xz)|[a-z0-9]+\.\d+)$'  # 常見的多段副檔名
     ]
 
     for pattern in multi_ext_patterns:
@@ -304,7 +304,7 @@ def extract_full_extension(filename: Union[str, None]):
             full_ext = match.group(0).lstrip('.')
             return full_ext
 
-    # 普通文件,返回最后一个扩展名。
+    # 普通檔案,返回最後一個副檔名。
     base_ext = os.path.splitext(filename)[-1]
     if base_ext:
         return base_ext.lstrip('.')
@@ -314,18 +314,18 @@ def extract_full_extension(filename: Union[str, None]):
 
 def is_compressed_file(filename: Union[str, None]) -> bool:
     """
-    判断是否为压缩包文件。
+    判斷是否為壓縮包檔案。
     """
     if not filename:
         return False
 
-    # 压缩文件扩展名模式。
+    # 壓縮檔案副檔名模式。
     compressed_patterns = [
-        # 单扩展名压缩格式。
+        # 單副檔名壓縮格式。
         r'\.(7z|rar|zip|tar|gz|bz2|xz|arj|cab|lzh|lzma|tgz|tbz2|txz|z|Z)$',
-        # 多段扩展名压缩格式。
+        # 多段副檔名壓縮格式。
         r'\.(tar\.(gz|bz2|xz)|7z\.\d+|rar\.\d+|zip\.\d+)$',
-        # 旧格式分卷。
+        # 舊格式分卷。
         r'\.(r\d+|z\d+|s\d+|t\d+)$'
     ]
 
@@ -348,6 +348,6 @@ def calc_sha256(file_path, chunk_size=8192) -> Union[str, None]:
                 sha256_hash.update(chunk)
         return sha256_hash.hexdigest()
     except PermissionError as e:
-        log.error(f'权限不足,无法计算文件SHA256,{_t(KeyWord.REASON)}:"{e}"')
+        log.error(f'權限不足,無法計算檔案SHA256,{_t(KeyWord.REASON)}:"{e}"')
     except Exception as e:
-        log.exception(f'计算文件SHA256失败,{_t(KeyWord.REASON)}:"{e}"')
+        log.exception(f'計算檔案SHA256失敗,{_t(KeyWord.REASON)}:"{e}"')

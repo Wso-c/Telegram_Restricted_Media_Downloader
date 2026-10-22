@@ -54,13 +54,15 @@ class DownloadType:
 
     def __iter__(self):
         for key, value in vars(self.__class__).items():
-            if not key.startswith('_') and not callable(value):  # 排除特殊方法和属性。
+            if not key.startswith('_') and not callable(value):  # 排除特殊方法和屬性。
                 yield value
 
 
 class DownloadStatus:
     PENDING = 'pending'
     DOWNLOADING = 'downloading'
+    PAUSED = 'paused'
+    CANCELLED = 'cancelled'
     SUCCESS = 'success'
     FAILURE = 'failure'
     SKIP = 'skip'
@@ -70,6 +72,8 @@ class DownloadStatus:
 class UploadStatus:
     PENDING = 'pending'
     UPLOADING = 'uploading'
+    PAUSED = 'paused'
+    CANCELLED = 'cancelled'
     SUCCESS = 'success'
     FAILURE = 'failure'
     SENT = 'sent'
@@ -87,7 +91,7 @@ class SaveDirectoryPrefix:
 
     def __iter__(self):
         for key, value in vars(self.__class__).items():
-            if not key.startswith('_') and not callable(value):  # 排除特殊方法和属性。
+            if not key.startswith('_') and not callable(value):  # 排除特殊方法和屬性。
                 yield value
 
 
@@ -226,7 +230,7 @@ class Extension:
 
 
 class GradientColor:
-    # 生成渐变色:https://photokit.com/colors/color-gradient/?lang=zh
+    # 生成漸變色:https://photokit.com/colors/color-gradient/?lang=zh
     BLUE2PURPLE_14 = [
         '#0ebeff',
         '#21b4f9',
@@ -331,21 +335,21 @@ class GradientColor:
     def __extend_gradient_colors(colors: list, target_length: int) -> list:
         extended_colors = colors[:]
         while len(extended_colors) < target_length:
-            # 添加原列表（除最后一个元素外）的逆序
+            # 添加原列表（除最後一個元素外）的逆序
             extended_colors.extend(colors[-2::-1])
-            # 如果仍然不够长，继续添加正序部分
+            # 如果仍然不夠長，繼續添加正序部分
             if len(extended_colors) < target_length:
                 extended_colors.extend(colors[:-1])
         return extended_colors[:target_length]
 
     @staticmethod
     def gen_gradient_text(text: str, gradient_color: list) -> str:
-        """当渐变色列表小于文字长度时,翻转并扩展当前列表。"""
+        """當漸變色列表小於文字長度時,翻轉並擴展目前列表。"""
         text_lst: list = [i for i in text]
         text_lst_len: int = len(text_lst)
         gradient_color_len: int = len(gradient_color)
         if text_lst_len > gradient_color_len:
-            # 扩展颜色列表以适应文本长度
+            # 擴展顏色列表以適應文字長度
             gradient_color = GradientColor.__extend_gradient_colors(gradient_color, text_lst_len)
         result: str = ''
         for i in range(text_lst_len):
@@ -354,23 +358,23 @@ class GradientColor:
 
     @staticmethod
     def __hex_to_rgb(hex_color: str) -> tuple:
-        """将十六进制颜色值转换为RGB元组。"""
+        """將十六進制顏色值轉換為RGB元組。"""
         hex_color = hex_color.lstrip('#')
         return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
 
     @staticmethod
     def __rgb_to_hex(r: int, g: int, b: int) -> str:
-        """将RGB元组转换为十六进制颜色值。"""
+        """將RGB元組轉換為十六進制顏色值。"""
         return f"#{r:02x}{g:02x}{b:02x}"
 
     @staticmethod
     def generate_gradient(start_color: str, end_color: str, steps: int) -> list:
-        """根据起始和结束颜色生成颜色渐变列表。"""
+        """根據起始和結束顏色生成顏色漸變列表。"""
         steps = 2 if steps <= 1 else steps
-        # 转换起始和结束颜色为RGB
+        # 轉換起始和結束顏色為RGB
         start_rgb = GradientColor.__hex_to_rgb(start_color)
         end_rgb = GradientColor.__hex_to_rgb(end_color)
-        # 生成渐变色列表
+        # 生成漸變色列表
         gradient_color: list = []
         for i in range(steps):
             r = int(start_rgb[0] + (end_rgb[0] - start_rgb[0]) * i / (steps - 1))
@@ -431,7 +435,7 @@ class Validator:
     def is_contain_chinese(text: str) -> bool:
         for ch in text:
             if u'\u4e00' <= ch <= u'\u9fff':
-                log.warning('如果无法正常下载,请尝试不使用中文路径后重试。')
+                log.warning('如果無法正常下載,請嘗試不使用中文路徑後重試。')
                 return True
         return False
 
@@ -442,13 +446,13 @@ class Validator:
                 if api_id.isdigit():
                     return True
                 else:
-                    log.warning(f'意外的参数:"{api_id}",不是「纯数字」请重新输入!')
+                    log.warning(f'意外的參數:"{api_id}",不是「純數字」請重新輸入!')
                     return False
             else:
-                log.warning(f'意外的参数,填写的"{api_id}"可能是「api_hash」,请填入正确的「api_id」!')
+                log.warning(f'意外的參數,填寫的"{api_id}"可能是「api_hash」,請填入正確的「api_id」!')
                 return False
         except (AttributeError, TypeError):
-            log.error('手动编辑config.yaml时,api_id需要有引号!')
+            log.error('手動編輯config.yaml時,api_id需要有引號!')
             return False
 
     @staticmethod
@@ -477,17 +481,17 @@ class Validator:
         if not os.path.exists(save_directory):
             while True:
                 try:
-                    question = console.input(f'目录:"{save_directory}"不存在,是否创建? - 「y|n」(默认y):').strip().lower()
+                    question = console.input(f'目錄:"{save_directory}"不存在,是否建立? - 「y|n」(預設y):').strip().lower()
                     if question in ('y', ''):
                         os.makedirs(save_directory, exist_ok=True)
-                        console.log(f'成功创建目录:"{save_directory}"')
+                        console.log(f'成功建立目錄:"{save_directory}"')
                         break
                     elif question == 'n':
                         break
                     else:
-                        log.warning(f'意外的参数:"{question}",支持的参数 - 「y|n」')
+                        log.warning(f'意外的參數:"{question}",支援的參數 - 「y|n」')
                 except Exception as e:
-                    log.error(f'意外的错误,原因:"{e}"')
+                    log.error(f'意外的錯誤,原因:"{e}"')
                     break
         return os.path.isdir(save_directory)
 
@@ -498,7 +502,7 @@ class Validator:
         except ValueError:
             return False
         except Exception as e:
-            log.error(f'意外的错误,原因:"{e}"')
+            log.error(f'意外的錯誤,原因:"{e}"')
             return False
 
     @staticmethod
@@ -519,12 +523,12 @@ class Validator:
     def is_valid_port(port: int) -> bool:
         try:
             return 0 < int(port) <= 65535
-        except ValueError:  # 处理非整数字符串的情况
+        except ValueError:  # 處理非整數字串的情況
             return False
-        except TypeError:  # 处理传入非数字类型的情况
+        except TypeError:  # 處理傳入非數字類型的情況
             return False
         except Exception as e:
-            log.error(f'意外的错误,原因:"{e}"')
+            log.error(f'意外的錯誤,原因:"{e}"')
             return False
 
     @staticmethod
@@ -537,12 +541,12 @@ class Validator:
                     if i in support_dtype:
                         valid_dtype.append(i)
                     else:
-                        log.warning(f'"{i}"不在支持的下载类型中,已移除。')
+                        log.warning(f'"{i}"不在支援的下載類型中,已移除。')
                 dtype[:] = valid_dtype
                 return bool(dtype)
             return False
         except Exception as e:
-            log.error(f'意外的错误,原因:"{e}"')
+            log.error(f'意外的錯誤,原因:"{e}"')
             return False
 
 
@@ -551,18 +555,18 @@ class ProcessConfig:
 
     @staticmethod
     def __parse_proxy_url(proxy_url: str) -> Optional[dict]:
-        """解析代理URL字符串。"""
+        """解析代理URL字串。"""
         try:
             if not proxy_url:
                 return None
 
-            # 正则表达式匹配代理URL，支持以下格式：
+            # 正則表達式匹配代理URL，支援以下格式：
             # - http://username:password@host:port
             # - https://host:port
             # - socks4://host:port
             # - socks5://host:port
-            # - host:port (无协议前缀)
-            # - 支持URL末尾有/的情况，如 http://127.0.0.1:10808/
+            # - host:port (無協議前綴)
+            # - 支援URL末尾有/的情況，如 http://127.0.0.1:10808/
             pattern = r'^(?:(https?|socks[45][ah]?)://)?(?:[^@]*@)?([^:]+):(\d+)/+$'
             match = re.match(pattern, proxy_url.lower())
 
@@ -573,14 +577,14 @@ class ProcessConfig:
             hostname = match.group(2)
             port = match.group(3)
 
-            # 如果没有scheme，默认为http。
+            # 如果沒有scheme，預設為http。
             if not scheme:
                 scheme = 'http'
-            # socks4a和socks5h统一为socks4和socks5。
+            # socks4a和socks5h統一為socks4和socks5。
             elif scheme in ('socks4a', 'socks5h'):
                 scheme = scheme[:-1]
 
-            # 验证端口号有效性。
+            # 驗證連接埠號有效性。
             try:
                 port = int(port)
             except ValueError:
@@ -603,7 +607,7 @@ class ProcessConfig:
 
     @staticmethod
     def get_unix_proxy() -> Optional[dict]:
-        """从环境变量获取 Unix/Linux/macOS 代理设置。"""
+        """從環境變量取得 Unix/Linux/macOS 代理設定。"""
         env_vars = ['http_proxy', 'HTTP_PROXY', 'https_proxy', 'HTTPS_PROXY', 'all_proxy', 'ALL_PROXY']
 
         for var in env_vars:
@@ -617,7 +621,7 @@ class ProcessConfig:
 
     @staticmethod
     def get_windows_proxy() -> Optional[dict]:
-        """从 Windows 注册表获取代理设置。"""
+        """從 Windows 註冊表取得代理設定。"""
         try:
             import winreg
             with winreg.OpenKey(
@@ -632,7 +636,7 @@ class ProcessConfig:
                 if not proxy_server:
                     return None
 
-                # 使用正则表达式解析代理服务器字符串。
+                # 使用正則表達式解析代理伺服器字串。
                 # 格式可能是: "http=127.0.0.1:7890;https=127.0.0.1:7890;socks=127.0.0.1:1080"。
                 # 或者是: "127.0.0.1:7890"。
                 proxy_info = {}
@@ -643,16 +647,16 @@ class ProcessConfig:
                     for proto, addr in matches:
                         proxy_info[proto.lower()] = addr
                 else:
-                    # 如果没有协议前缀，则整个字符串就是代理地址。
+                    # 如果沒有協議前綴，則整個字串就是代理地址。
                     proxy_info['http'] = proxy_server
 
-                # 优先级：http > https > socks。
+                # 優先級：http > https > socks。
                 proxy_addr = proxy_info.get('http') or proxy_info.get('https') or proxy_info.get('socks')
 
                 if not proxy_addr:
                     return None
 
-                # 使用正则表达式解析地址和端口。
+                # 使用正則表達式解析地址和連接埠。
                 addr_pattern = r'^([^:]+):(\d+)$'
                 addr_match = re.match(addr_pattern, proxy_addr)
 
@@ -665,14 +669,14 @@ class ProcessConfig:
                 except ValueError:
                     return None
 
-                # 判断协议类型。
+                # 判斷協議類型。
                 scheme = 'http'
                 if 'socks5' in proxy_server.lower():
                     scheme = 'socks5'
                 elif 'socks4' in proxy_server.lower():
                     scheme = 'socks4'
                 elif 'socks=' in proxy_server.lower():
-                    # 如果只有socks=没有数字，默认socks5
+                    # 如果只有socks=沒有數字，預設socks5
                     scheme = 'socks5'
 
                 if not (0 <= port <= 65535):
@@ -693,33 +697,33 @@ class ProcessConfig:
         def decorator(func: Callable) -> Callable:
             @wraps(func)
             def wrapper(*args, **kwargs) -> Any:
-                # 尝试获取系统代理（跨平台）。
+                # 嘗試取得系統代理（跨平台）。
                 system_proxy = ProcessConfig.get_windows_proxy() if platform.system() == 'Windows' else ProcessConfig.get_unix_proxy()
-                # 如果成功获取到系统代理并且包含所需的参数。
+                # 如果成功取得到系統代理並且包含所需的參數。
                 if system_proxy and param_name in system_proxy:
                     question: str = GetStdioParams.UNDEFINED
                     if param_name == 'scheme' and ProcessConfig.PROXY_AUTO_FILL is False:
                         while True:
                             try:
                                 question = console.input(
-                                    f'获取到系统代理"{ProcessConfig.format_proxy_prompt(system_proxy)}",是否自动填入? - 「y|n」(默认y):').strip().lower()
+                                    f'取得到系統代理"{ProcessConfig.format_proxy_prompt(system_proxy)}",是否自動填入? - 「y|n」(預設y):').strip().lower()
                                 if question in ('y', ''):
                                     ProcessConfig.PROXY_AUTO_FILL = True
                                     break
                                 elif question == 'n':
                                     break
                                 else:
-                                    log.warning(f'意外的参数:"{question}",支持的参数 - 「y|n」')
+                                    log.warning(f'意外的參數:"{question}",支援的參數 - 「y|n」')
                             except Exception as e:
-                                log.error(f'意外的错误,原因:"{e}"')
+                                log.error(f'意外的錯誤,原因:"{e}"')
                                 break
                     if question in ('y', '') or ProcessConfig.PROXY_AUTO_FILL:
-                        # 提取对应参数的值。
+                        # 提取對應參數的值。
                         value = system_proxy[param_name]
-                        # 根据参数类型打印相应的提示信息。
+                        # 根據參數類型列印相應的提示資訊。
                         if param_name == 'scheme':
                             console.print(
-                                f'已从系统代理自动获取「scheme」为:「{value}」',
+                                f'已從系統代理自動取得「scheme」為:「{value}」',
                                 style=ProcessConfig.stdio_style('scheme')
                             )
                             return {
@@ -728,7 +732,7 @@ class ProcessConfig:
                             }
                         elif param_name == 'hostname':
                             console.print(
-                                f'已从系统代理自动获取「hostname」为:「{value}」',
+                                f'已從系統代理自動取得「hostname」為:「{value}」',
                                 style=ProcessConfig.stdio_style('hostname')
                             )
                             return {
@@ -737,7 +741,7 @@ class ProcessConfig:
                             }
                         elif param_name == 'port':
                             console.print(
-                                f'已从系统代理自动获取「port」为:「{value}」',
+                                f'已從系統代理自動取得「port」為:「{value}」',
                                 style=ProcessConfig.stdio_style('port')
                             )
                             return {
@@ -745,7 +749,7 @@ class ProcessConfig:
                                 'record_flag': True
                             }
 
-                # 如果没有获取到系统代理或参数不完整，执行原函数。
+                # 如果沒有取得到系統代理或參數不完整，執行原函數。
                 return func(*args, **kwargs)
 
             return wrapper
@@ -763,7 +767,7 @@ class ProcessConfig:
 
     @staticmethod
     def get_dtype(download_dtype: list) -> dict:
-        """获取所需下载文件的类型。"""
+        """取得所需下載檔案的類型。"""
         meta: dict = {}
         support_dtype: list = [_ for _ in DownloadType()]
         for dtype in download_dtype:
@@ -772,7 +776,7 @@ class ProcessConfig:
 
     @staticmethod
     def stdio_style(key: str, color=None) -> str:
-        """控制用户交互时打印出不同的颜色(渐变)。"""
+        """控制用戶互動時列印出不同的顏色(漸變)。"""
         if color is None:
             color = GradientColor.ORANGE2YELLOW_15
         _stdio_queue: dict = {
@@ -796,11 +800,11 @@ class ProcessConfig:
 
     @staticmethod
     def is_proxy_input(proxy_config: dict) -> bool:
-        """检测代理配置是否需要用户输入。"""
+        """檢測代理設定是否需要用戶輸入。"""
         result: bool = False
         basic_truth_table: list = []
         advance_account_truth_table: list = []
-        if proxy_config.get('enable_proxy') is False:  # 检测打开了代理但是代理配置错误。
+        if proxy_config.get('enable_proxy') is False:  # 檢測開啟了代理但是代理設定錯誤。
             return False
         for _ in proxy_config.items():
             if _[0] in ['scheme', 'port', 'hostname']:
@@ -808,20 +812,20 @@ class ProcessConfig:
             if _[0] in ['username', 'password']:
                 advance_account_truth_table.append(_[1])
         if all(basic_truth_table) is False:  # noqa.
-            console.print('请配置代理!', style=ProcessConfig.stdio_style('config_proxy'))
+            console.print('請設定代理!', style=ProcessConfig.stdio_style('config_proxy'))
             console.print(
-                '[#79FCD4]如果对代理配置有疑问[/#79FCD4][#FF79D4]请访问:[/#FF79D4]\n'
-                '[link=https://github.com/Gentlesprite/Telegram_Restricted_Media_Downloader/wiki#配置代理时在代理在本机的情况下]'
-                'https://github.com/Gentlesprite/Telegram_Restricted_Media_Downloader/wiki#配置代理时在代理在本机的情况下[/link]'
-                '\n[#FCFF79]若[/#FCFF79][#FF4689]无法[/#FF4689][#FF7979]访问[/#FF7979][#79FCD4],[/#79FCD4]'
-                '[#FCFF79]可[/#FCFF79][#d4fc79]查阅[/#d4fc79]'
-                '[#FC79A5]软件压缩包所提供的[/#FC79A5][#79E2FC]"使用手册"[/#79E2FC]'
-                '[#79FCD4]文件夹下的[/#79FCD4][#FFB579]"常见问题及解决方案汇总.pdf"[/#FFB579]'
-                '[#79FCB5]中的[/#79FCB5][#D479FC]【问题14】里的【解决方案】[/#D479FC][#FCE679]进行操作[/#FCE679][#FC79A6]。[/#FC79A6]'
+                '[#79FCD4]如果對代理設定有疑問[/#79FCD4][#FF79D4]請存取:[/#FF79D4]\n'
+                '[link=https://github.com/Gentlesprite/Telegram_Restricted_Media_Downloader/wiki#設定代理時在代理在本機的情況下]'
+                'https://github.com/Gentlesprite/Telegram_Restricted_Media_Downloader/wiki#設定代理時在代理在本機的情況下[/link]'
+                '\n[#FCFF79]若[/#FCFF79][#FF4689]無法[/#FF4689][#FF7979]存取[/#FF7979][#79FCD4],[/#79FCD4]'
+                '[#FCFF79]可[/#FCFF79][#d4fc79]查閱[/#d4fc79]'
+                '[#FC79A5]軟件壓縮包所提供的[/#FC79A5][#79E2FC]"使用手冊"[/#79E2FC]'
+                '[#79FCD4]資料夾下的[/#79FCD4][#FFB579]"常見問題及解決方案彙總.pdf"[/#FFB579]'
+                '[#79FCB5]中的[/#79FCB5][#D479FC]【問題14】裏的【解決方案】[/#D479FC][#FCE679]進行操作[/#FCE679][#FC79A6]。[/#FC79A6]'
             )
             result: bool = True
         if any(advance_account_truth_table) and all(advance_account_truth_table) is False:
-            log.warning('代理账号或密码未输入!')
+            log.warning('代理帳號或密碼未輸入!')
             result: bool = True
         return result
 
@@ -835,7 +839,7 @@ class ProcessConfig:
 
 
 class GetStdioParams:
-    UNDEFINED: str = '无'
+    UNDEFINED: str = '無'
 
     @staticmethod
     def __timeout_input(
@@ -844,10 +848,10 @@ class GetStdioParams:
             default: str = '',
             timeout: int = 5
     ) -> str:
-        """跨平台的输入超时后自动设置为默认值,报错时返回默认input。"""
+        """跨平台的輸入超時後自動設定為預設值,報錯時返回預設input。"""
 
         def timeout_notice():
-            console.print('\n输入超时,已自动设置为默认值。\n', style='#FF4689')
+            console.print('\n輸入超時,已自動設定為預設值。\n', style='#FF4689')
 
         if sys.platform == 'win32':
             try:
@@ -862,44 +866,44 @@ class GetStdioParams:
                     elapsed = time.time() - start_time
                     remaining = int(timeout - elapsed)
 
-                    # 倒计时显示更新。
+                    # 倒計時顯示更新。
                     if remaining != last_second and remaining >= 0:
                         if countdown_displayed:
-                            # 删除之前的倒计时（1位数字+1个空格）。
+                            # 刪除之前的倒計時（1位數字+1個空格）。
                             print('\b \b\b \b', end='', flush=True)
-                        # 显示新的倒计时（输入时才显示）。
+                        # 顯示新的倒計時（輸入時才顯示）。
                         if not input_buffer and remaining >= 0:
                             console.print(f'{remaining} ', end='', style='dim')
                             countdown_displayed = True
                         last_second = remaining
 
-                    if msvcrt.kbhit():  # 检测是否有键盘输入。
-                        # 清除倒计时显示。
+                    if msvcrt.kbhit():  # 檢測是否有鍵盤輸入。
+                        # 清除倒計時顯示。
                         if countdown_displayed:
                             print('\b \b\b \b', end='', flush=True)
                             countdown_displayed = False
 
                         char = msvcrt.getwch()
-                        if char == '\r':  # 回车键结束输入。
+                        if char == '\r':  # 按 Enter鍵結束輸入。
                             user_input = ''.join(input_buffer)
                             print('\n') if user_input in ('y', 'n', '') else None
                             return user_input.strip() or default
-                        elif char in ('\x08', '\b'):  # Backspace键处理。
+                        elif char in ('\x08', '\b'):  # Backspace鍵處理。
                             if input_buffer:
                                 input_buffer.pop()
-                                print('\b \b', end='', flush=True)  # 删除控制台上的最后一个字符。
-                        elif char in ('\x00', '\xe0'):  # 上下左右键。
+                                print('\b \b', end='', flush=True)  # 刪除控制枱上的最後一個字元。
+                        elif char in ('\x00', '\xe0'):  # 上下左右鍵。
                             _ = msvcrt.getwch()
                         else:
                             input_buffer.append(char)
                             console.print(char, end='')
-                        last_second = -1  # 输入开始后不再显示倒计时。
+                        last_second = -1  # 輸入開始後不再顯示倒計時。
                     elif elapsed > timeout:
                         timeout_notice()
                         return default
                     time.sleep(0.1)
             except Exception as e:
-                log.exception(f'无法自动设置!请手动进行设置,{_t(KeyWord.REASON)}:"{e}"')
+                log.exception(f'無法自動設定!請手動進行設定,{_t(KeyWord.REASON)}:"{e}"')
                 return console.input(error_prompt if error_prompt else prompt)
         else:
             import tty
@@ -909,11 +913,11 @@ class GetStdioParams:
             console.print(prompt, end='')
             sys.stdout.flush()
 
-            # 保存原始终端设置。
+            # 儲存原始終端機設定。
             old_settings = termios.tcgetattr(sys.stdin)
             elapsed = 0
             try:
-                # 设置终端为原始模式,允许逐字符读取。
+                # 設定終端機為原始模式,允許逐字元讀取。
                 tty.setraw(sys.stdin.fileno())
 
                 start_time: float = time.time()
@@ -924,87 +928,87 @@ class GetStdioParams:
                     elapsed = time.time() - start_time
                     remaining = int(timeout - elapsed)
 
-                    # 倒计时显示更新。
+                    # 倒計時顯示更新。
                     if remaining != last_second and remaining >= 0:
                         if countdown_displayed:
-                            # 删除之前的倒计时（数字+空格）。
+                            # 刪除之前的倒計時（數字+空格）。
                             backspace_count = len(str(last_second)) + 1
                             sys.stdout.write('\b \b' * backspace_count)
                             sys.stdout.flush()
-                        # 显示新的倒计时（输入时才显示）。
+                        # 顯示新的倒計時（輸入時才顯示）。
                         if not input_buffer and remaining >= 0:
                             console.print(f'{remaining} ', end='', style='dim')
                             sys.stdout.flush()
                             countdown_displayed = True
                         last_second = remaining
 
-                    # 使用select检测输入,超时0.1秒以便更新倒计时。
+                    # 使用select檢測輸入,超時0.1秒以便更新倒計時。
                     ready, _, _ = select.select([sys.stdin], [], [], 0.1)
 
                     if ready:
-                        # 清除倒计时显示。
+                        # 清除倒計時顯示。
                         if countdown_displayed:
                             backspace_count = len(str(remaining)) + 1
                             sys.stdout.write('\b \b' * backspace_count)
                             sys.stdout.flush()
                             countdown_displayed = False
 
-                        # 读取一个字符。
+                        # 讀取一個字元。
                         char = sys.stdin.read(1)
 
-                        if char == '\r' or char == '\n':  # 回车键结束输入。
+                        if char == '\r' or char == '\n':  # 按 Enter鍵結束輸入。
                             user_input = ''.join(input_buffer)
                             sys.stdout.write('\n')
                             sys.stdout.flush()
                             return user_input.strip() or default
-                        elif char == '\x7f' or char == '\b':  # Backspace/Delete键处理。
+                        elif char == '\x7f' or char == '\b':  # Backspace/Delete鍵處理。
                             if input_buffer:
                                 input_buffer.pop()
                                 sys.stdout.write('\b \b')
                                 sys.stdout.flush()
-                        elif char == '\x1b':  # 转义序列（上下左右键等）。
-                            # 读取接下来的两个字符。
+                        elif char == '\x1b':  # 轉義序列（上下左右鍵等）。
+                            # 讀取接下來的兩個字元。
                             _ = sys.stdin.read(2)
-                        elif ord(char) >= 32:  # 可打印字符。
+                        elif ord(char) >= 32:  # 可列印字元。
                             input_buffer.append(char)
                             sys.stdout.write(char)
                             sys.stdout.flush()
-                        last_second = -1  # 输入开始后不再显示倒计时。
+                        last_second = -1  # 輸入開始後不再顯示倒計時。
 
                     elif elapsed > timeout:
-                        # 清除倒计时显示。
+                        # 清除倒計時顯示。
                         if countdown_displayed:
                             backspace_count = len(str(remaining)) + 1
                             sys.stdout.write('\b \b' * backspace_count)
                             sys.stdout.flush()
                         return default
             except Exception as e:
-                log.exception(f'无法自动设置!请手动进行设置,{_t(KeyWord.REASON)}:"{e}"')
+                log.exception(f'無法自動設定!請手動進行設定,{_t(KeyWord.REASON)}:"{e}"')
                 return console.input(error_prompt if error_prompt else prompt)
             finally:
-                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)  # 恢复终端设置。
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)  # 恢復終端機設定。
                 timeout_notice() if elapsed > timeout else print()
 
     @staticmethod
     def get_is_ki_save_config(valid_format: str = 'y|n') -> dict:
         while True:
             is_save_config: str = console.input(
-                f'「退出提示」是否需要保存当前已填写的参数? - 「{valid_format}」:').strip().lower()
+                f'「退出提示」是否需要儲存目前已填寫的參數? - 「{valid_format}」:').strip().lower()
             if is_save_config == 'y':
                 return {'is_ki_save_config': True}
             elif is_save_config == 'n':
                 return {'is_ki_save_config': False}
             else:
-                log.warning(f'意外的参数:"{is_save_config}",支持的参数 - 「{valid_format}」')
+                log.warning(f'意外的參數:"{is_save_config}",支援的參數 - 「{valid_format}」')
 
     @staticmethod
     def get_is_re_config(valid_format: str = 'y|n') -> dict:
-        prompt: str = f'检测到已配置完成的配置文件,是否需要重新配置?(配置文件将自动备份) - 「{valid_format}」'
+        prompt: str = f'檢測到已設定完成的設定檔,是否需要重新設定?(設定檔將自動備份) - 「{valid_format}」'
         timeout: int = 5
         while True:
             is_re_config: str = GetStdioParams.__timeout_input(
                 prompt=f'{prompt}:',
-                error_prompt=f'{prompt}(默认n):',
+                error_prompt=f'{prompt}(預設n):',
                 default='n',
                 timeout=timeout
             ).strip().lower()
@@ -1014,41 +1018,41 @@ class GetStdioParams:
                 return {'is_re_config': False}
             else:
                 console.print('\n') if sys.platform == 'win32' else None
-                log.warning(f'意外的参数:"{is_re_config}",支持的参数 - 「{valid_format}」(默认n)')
+                log.warning(f'意外的參數:"{is_re_config}",支援的參數 - 「{valid_format}」(預設n)')
 
     @staticmethod
     def get_is_change_account(valid_format: str = 'y|n') -> dict:
         style: str = '#FF4689'
         while True:
             is_change_account = console.input(
-                '是否需要切换账号? - 「y|n」(默认n):').strip().lower()
+                '是否需要切換帳號? - 「y|n」(預設n):').strip().lower()
             if is_change_account in ('n', ''):
-                console.print('用户不需要切换「账号」。', style=style)
+                console.print('用戶不需要切換「帳號」。', style=style)
                 return {'is_change_account': False}
             elif is_change_account == 'y':
-                console.print('用户需要切换「账号」。', style=style)
+                console.print('用戶需要切換「帳號」。', style=style)
                 return {'is_change_account': True}
             else:
-                log.warning(f'意外的参数:"{is_change_account}",支持的参数 - 「{valid_format}」!')
+                log.warning(f'意外的參數:"{is_change_account}",支援的參數 - 「{valid_format}」!')
 
     @staticmethod
     def get_session_directory():
         style: str = '#FF4689'
         while True:
             session_directory = console.input(
-                '请输入「会话文件目录」(可为「空目录」,也可为「已登录的会话文件目录」):').strip()
-            console.print(f'「会话文件夹的路径」设置为:{session_directory}。', style=style)
+                '請輸入「會話檔案目錄」(可為「空目錄」,也可為「已登入的會話檔案目錄」):').strip()
+            console.print(f'「會話資料夾的路徑」設定為:{session_directory}。', style=style)
             return {'session_directory': session_directory}
 
     @staticmethod
     def get_api_id(last_record: str) -> dict:
         while True:
             api_id = console.input(
-                f'请输入「api_id」上一次的记录是:「{last_record if last_record else GetStdioParams.UNDEFINED}」:').strip()
+                f'請輸入「api_id」上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」:').strip()
             if api_id == '' and last_record is not None:
                 api_id = last_record
             if Validator.is_valid_api_id(api_id):
-                console.print(f'已设置「api_id」为:「{api_id}」', style=ProcessConfig.stdio_style('api_id'))
+                console.print(f'已設定「api_id」為:「{api_id}」', style=ProcessConfig.stdio_style('api_id'))
                 return {
                     'api_id': api_id,
                     'record_flag': True
@@ -1058,56 +1062,56 @@ class GetStdioParams:
     def get_api_hash(last_record: str, valid_length: int = 32) -> dict:
         while True:
             api_hash = console.input(
-                f'请输入「api_hash」上一次的记录是:「{last_record if last_record else GetStdioParams.UNDEFINED}」:').strip().lower()
+                f'請輸入「api_hash」上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」:').strip().lower()
             if api_hash == '' and last_record is not None:
                 api_hash = last_record
             if Validator.is_valid_api_hash(api_hash, valid_length):
-                console.print(f'已设置「api_hash」为:「{api_hash}」', style=ProcessConfig.stdio_style('api_hash'))
+                console.print(f'已設定「api_hash」為:「{api_hash}」', style=ProcessConfig.stdio_style('api_hash'))
                 return {
                     'api_hash': api_hash,
                     'record_flag': True
                 }
             else:
-                log.warning(f'意外的参数:"{api_hash}",不是一个「{valid_length}位」的「值」!请重新输入!')
+                log.warning(f'意外的參數:"{api_hash}",不是一個「{valid_length}位」的「值」!請重新輸入!')
 
     @staticmethod
     def get_enable_bot(valid_format: str = 'y|n') -> dict:
         while True:
-            enable_bot = console.input('是否启用「机器人」(需要提供bot_token)? - 「y|n」(默认n):').strip().lower()
+            enable_bot = console.input('是否啟用「機械人」(需要提供bot_token)? - 「y|n」(預設n):').strip().lower()
             if enable_bot in ('n', ''):
-                console.print(f'已设置为不启用「机器人」。', style=ProcessConfig.stdio_style('bot_token'))
+                console.print(f'已設定為不啟用「機械人」。', style=ProcessConfig.stdio_style('bot_token'))
                 return {'enable_bot': False}
             elif enable_bot == 'y':
-                console.print(f'请配置「bot_token」。', style=ProcessConfig.stdio_style('bot_token'))
+                console.print(f'請設定「bot_token」。', style=ProcessConfig.stdio_style('bot_token'))
                 return {'enable_bot': True}
             else:
-                log.warning(f'意外的参数:"{enable_bot}",支持的参数 - 「{valid_format}」!')
+                log.warning(f'意外的參數:"{enable_bot}",支援的參數 - 「{valid_format}」!')
 
     @staticmethod
     def get_bot_token(last_record: str, valid_format: str = ':') -> dict:
         while True:
             bot_token = console.input(
-                f'请输入当前账号的「bot_token」上一次的记录是:「{last_record if last_record else GetStdioParams.UNDEFINED}」:').strip()
+                f'請輸入目前帳號的「bot_token」上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」:').strip()
             if bot_token == '' and last_record is not None:
                 bot_token = last_record
             if Validator.is_valid_bot_token(bot_token, valid_format):
-                console.print(f'已设置「bot_token」为:「{bot_token}」', style=ProcessConfig.stdio_style('bot_token'))
+                console.print(f'已設定「bot_token」為:「{bot_token}」', style=ProcessConfig.stdio_style('bot_token'))
                 return {
                     'bot_token': bot_token,
                     'record_flag': True
                 }
             else:
-                log.warning(f'意外的参数:"{bot_token}",「bot_token」中需要包含":",请重新输入!')
+                log.warning(f'意外的參數:"{bot_token}",「bot_token」中需要包含":",請重新輸入!')
 
     @staticmethod
     def get_links(last_record: str, valid_format: str = '.txt', enable_bot: bool = False) -> dict:
-        # 输入需要下载的媒体链接文件路径,确保文件存在。
+        # 輸入需要下載的媒體連結檔案路徑,確保檔案存在。
         links_file_path = None
         while True:
             try:
-                bot_notice = '(检测到已配置机器人,此步骤可忽略)' if enable_bot else ''
+                bot_notice = '(檢測到已設定機械人,此步驟可忽略)' if enable_bot else ''
                 links_file_path = console.input(
-                    f'请输入需要下载的媒体链接的「完整路径」。上一次的记录是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
+                    f'請輸入需要下載的媒體連結的「完整路徑」。上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
                     f'格式 - 「{valid_format}」{bot_notice}:').strip()
                 if links_file_path == '':
                     if last_record is not None:
@@ -1119,37 +1123,37 @@ class GetStdioParams:
                         with open(file=links_file_path, mode='w', encoding='UTF-8'):
                             pass
                     except Exception as e:
-                        log.warning(f'无法创建文件:"{links_file_path}"请排查权限问题,{_t(KeyWord.REASON)}:"{e}"')
+                        log.warning(f'無法建立檔案:"{links_file_path}"請排查權限問題,{_t(KeyWord.REASON)}:"{e}"')
                 if Validator.is_valid_links_file(links_file_path, valid_format):
-                    console.print(f'已设置「links」为:「{links_file_path}」', style=ProcessConfig.stdio_style('links'))
+                    console.print(f'已設定「links」為:「{links_file_path}」', style=ProcessConfig.stdio_style('links'))
                     Validator.is_contain_chinese(links_file_path)
                     return {
                         'links': links_file_path,
                         'record_flag': True
                     }
                 elif not os.path.normpath(links_file_path).lower().endswith('.txt'):
-                    log.warning(f'意外的参数:"{links_file_path}",文件路径必须以「{valid_format}」结尾,请重新输入!')
+                    log.warning(f'意外的參數:"{links_file_path}",檔案路徑必須以「{valid_format}」結尾,請重新輸入!')
                 else:
                     log.warning(
-                        f'意外的参数:"{links_file_path}",文件「必须存在」(区分大小写),请重新输入!')
+                        f'意外的參數:"{links_file_path}",檔案「必須存在」(區分大小寫),請重新輸入!')
             except Exception as e:
                 log.warning(
-                    f'意外的参数:"{links_file_path}",文件路径必须以「{valid_format}」结尾,并且「必须存在」,请重新输入!{_t(KeyWord.REASON)}:"{e}"')
+                    f'意外的參數:"{links_file_path}",檔案路徑必須以「{valid_format}」結尾,並且「必須存在」,請重新輸入!{_t(KeyWord.REASON)}:"{e}"')
 
     @staticmethod
     def get_save_directory(last_record) -> dict:
-        # 输入媒体保存路径,确保是一个有效的目录路径。
+        # 輸入媒體儲存路徑,確保是一個有效的目錄路徑。
         while True:
             save_directory = console.input(
-                f'请输入媒体「保存路径」。上一次的记录是:「{last_record if last_record else GetStdioParams.UNDEFINED}」:').strip()
+                f'請輸入媒體「儲存路徑」。上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」:').strip()
             if save_directory == '':
                 if last_record is not None:
                     save_directory = last_record
                 else:
                     save_directory = os.path.join(os.getcwd(), 'downloads')
-                    log.warning('没有上一次的记录,已设置为默认目录。')
+                    log.warning('沒有上一次的記錄,已設定為預設目錄。')
             if Validator.is_valid_save_directory(save_directory):
-                console.print(f'已设置「save_directory」为:「{save_directory}」',
+                console.print(f'已設定「save_directory」為:「{save_directory}」',
                               style=ProcessConfig.stdio_style('save_directory'))
                 Validator.is_contain_chinese(save_directory)
                 return {
@@ -1157,57 +1161,57 @@ class GetStdioParams:
                     'record_flag': True
                 }
             elif os.path.isfile(save_directory):
-                log.warning(f'意外的参数:"{save_directory}",指定的路径是一个文件并非目录,请重新输入!')
+                log.warning(f'意外的參數:"{save_directory}",指定的路徑是一個檔案並非目錄,請重新輸入!')
             else:
-                log.warning(f'意外的参数:"{save_directory}",指定的路径无效或不是一个目录,请重新输入!')
+                log.warning(f'意外的參數:"{save_directory}",指定的路徑無效或不是一個目錄,請重新輸入!')
 
     @staticmethod
     def get_max_download_task(last_record) -> dict:
-        # 输入最大下载任务数,确保是一个整数且不超过特定限制。
-        default_prompt: str = '(默认3)' if last_record is None else ''
+        # 輸入最大下載任務數,確保是一個整數且不超過特定限制。
+        default_prompt: str = '(預設3)' if last_record is None else ''
         while True:
             try:
                 max_download_task = console.input(
-                    f'请输入「最大下载任务数」。上一次的记录是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
-                    f',值过高可能会导致网络相关问题,建议默认{default_prompt}:').strip()
+                    f'請輸入「最大下載任務數」。上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
+                    f',值過高可能會導致網絡相關問題,建議預設{default_prompt}:').strip()
                 if max_download_task == '' and last_record is not None:
                     max_download_task = last_record
                 if max_download_task == '':
                     max_download_task = 3
                 if Validator.is_valid_number(max_download_task):
-                    console.print(f'已设置「max_download_task」为:「{max_download_task}」',
+                    console.print(f'已設定「max_download_task」為:「{max_download_task}」',
                                   style=ProcessConfig.stdio_style('max_download_task'))
                     return {
                         'max_download_task': int(max_download_task),
                         'record_flag': True
                     }
                 else:
-                    log.warning(f'意外的参数:"{max_download_task}",任务数必须是「正整数」,请重新输入!')
+                    log.warning(f'意外的參數:"{max_download_task}",任務數必須是「正整數」,請重新輸入!')
             except Exception as e:
-                log.error(f'意外的错误,{_t(KeyWord.REASON)}:"{e}"')
+                log.error(f'意外的錯誤,{_t(KeyWord.REASON)}:"{e}"')
 
     @staticmethod
     def get_max_retry_count(last_record) -> dict:
-        default_prompt: str = '(默认5)' if last_record is None else ''
+        default_prompt: str = '(預設5)' if last_record is None else ''
         while True:
             try:
                 max_retry_count = console.input(
-                    f'请输入任务失败时「最大重试次数」。上一次的记录是:「{last_record if last_record else GetStdioParams.UNDEFINED}」{default_prompt}:').strip()
+                    f'請輸入任務失敗時「最大重試次數」。上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」{default_prompt}:').strip()
                 if max_retry_count == '' and last_record is not None:
                     max_retry_count = last_record
                 if max_retry_count == '':
                     max_retry_count = 5
                 if Validator.is_valid_number(max_retry_count):
-                    console.print(f'已设置「max_retry_count」为:「{max_retry_count}」',
+                    console.print(f'已設定「max_retry_count」為:「{max_retry_count}」',
                                   style=ProcessConfig.stdio_style('max_retry_count'))
                     return {
                         'max_retry_count': int(max_retry_count),
                         'record_flag': True
                     }
                 else:
-                    log.warning(f'意外的参数:"{max_retry_count}",最大重试次数必须是「正整数」,请重新输入!')
+                    log.warning(f'意外的參數:"{max_retry_count}",最大重試次數必須是「正整數」,請重新輸入!')
             except Exception as e:
-                log.error(f'意外的错误,{_t(KeyWord.REASON)}:"{e}"')
+                log.error(f'意外的錯誤,{_t(KeyWord.REASON)}:"{e}"')
 
     @staticmethod
     def get_download_type(last_record: Union[list, None]) -> dict:
@@ -1219,10 +1223,10 @@ class GetStdioParams:
                 if meta.get(dtype) is True:  # noqa.
                     record.append(dtype)
             last_record: str = ' '.join(record)
-        default_prompt: str = '(默认为所有已支持的下载类型)' if last_record is None else ''
+        default_prompt: str = '(預設為所有已支援的下載類型)' if last_record is None else ''
         while True:
             download_type: Union[str, list] = console.input(
-                f'输入需要下载的「媒体类型」(以空格分隔可多选)。上一次的记录是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
+                f'輸入需要下載的「媒體類型」(以空格分隔可多選)。上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
                 f'格式 - 「video photo document audio voice animation video_note live_photo」{default_prompt}:').strip()
             if download_type == '' and last_record is not None:
                 download_type = last_record
@@ -1232,7 +1236,7 @@ class GetStdioParams:
             if Validator.is_valid_download_type(download_type):
                 dtype = ' '.join(download_type) if download_type else [_ for _ in DownloadType()]
                 console.print(
-                    f'已设置「download_type」为:「{dtype}」',
+                    f'已設定「download_type」為:「{dtype}」',
                     style=ProcessConfig.stdio_style('download_type')
                 )
                 return {
@@ -1240,8 +1244,8 @@ class GetStdioParams:
                     'record_flag': True
                 }
             else:
-                prompt: str = f'意外的参数:"{download_type}"' if download_type else '请重新输入下载类型'
-                log.warning(f'{prompt},支持的参数 - 「video photo document」(以空格分隔可多选)')
+                prompt: str = f'意外的參數:"{download_type}"' if download_type else '請重新輸入下載類型'
+                log.warning(f'{prompt},支援的參數 - 「video photo document」(以空格分隔可多選)')
 
     @staticmethod
     def get_is_shutdown(last_record: str, valid_format: str = 'y|n') -> dict:
@@ -1252,13 +1256,13 @@ class GetStdioParams:
             last_record: str = 'n'
         else:
             last_record = GetStdioParams.UNDEFINED
-        t = f'已设置「is_shutdown」为:「y」,下载完成后将自动关机!'  # v1.3.0 修复配置is_shutdown参数时显示错误。
-        f = f'已设置「is_shutdown」为:「n」'
-        default_prompt: str = '(默认n)' if last_record == GetStdioParams.UNDEFINED else ''
+        t = f'已設定「is_shutdown」為:「y」,下載完成後將自動關機!'  # v1.3.0 修復設定is_shutdown參數時顯示錯誤。
+        f = f'已設定「is_shutdown」為:「n」'
+        default_prompt: str = '(預設n)' if last_record == GetStdioParams.UNDEFINED else ''
         while True:
             try:
                 is_shutdown = console.input(
-                    f'下载完成后是否「自动关机」。上一次的记录是:「{last_record}」 - 「{valid_format}」'
+                    f'下載完成後是否「自動關機」。上一次的記錄是:「{last_record}」 - 「{valid_format}」'
                     f'{default_prompt}:').strip().lower()
                 if is_shutdown == '' and last_record != GetStdioParams.UNDEFINED:
                     if last_record == 'y':
@@ -1275,10 +1279,10 @@ class GetStdioParams:
                     console.print(f, style=_style)
                     return {'is_shutdown': False, 'record_flag': True}
                 else:
-                    log.warning(f'意外的参数:"{is_shutdown}",支持的参数 - 「{valid_format}」')
+                    log.warning(f'意外的參數:"{is_shutdown}",支援的參數 - 「{valid_format}」')
 
             except Exception as e:
-                log.error(f'意外的错误,{_t(KeyWord.REASON)}:"{e}"')
+                log.error(f'意外的錯誤,{_t(KeyWord.REASON)}:"{e}"')
 
     @staticmethod
     def get_enable_proxy(last_record: Union[str, bool], valid_format: str = 'y|n') -> dict:
@@ -1286,10 +1290,10 @@ class GetStdioParams:
             ep_notice: str = 'y' if last_record else 'n'
         else:
             ep_notice: str = GetStdioParams.UNDEFINED
-        default_prompt: str = '(默认n)' if ep_notice == GetStdioParams.UNDEFINED else ''
-        while True:  # 询问是否开启代理。
+        default_prompt: str = '(預設n)' if ep_notice == GetStdioParams.UNDEFINED else ''
+        while True:  # 詢問是否開啟代理。
             enable_proxy = console.input(
-                f'是否需要使用「代理」。上一次的记录是:「{ep_notice}」'
+                f'是否需要使用「代理」。上一次的記錄是:「{ep_notice}」'
                 f'格式 - 「{valid_format}」{default_prompt}:').strip().lower()
             if enable_proxy == '' and last_record is not None:
                 if last_record is True:
@@ -1300,15 +1304,15 @@ class GetStdioParams:
                 enable_proxy = 'n'
             if Validator.is_valid_enable_proxy(enable_proxy):
                 if enable_proxy == 'y':
-                    console.print(f'已设置「enable_proxy」为:「{enable_proxy}」',
+                    console.print(f'已設定「enable_proxy」為:「{enable_proxy}」',
                                   style=ProcessConfig.stdio_style('enable_proxy'))
                     return {'enable_proxy': True, 'record_flag': True}
                 elif enable_proxy == 'n':
-                    console.print(f'已设置「enable_proxy」为:「{enable_proxy}」',
+                    console.print(f'已設定「enable_proxy」為:「{enable_proxy}」',
                                   style=ProcessConfig.stdio_style('enable_proxy'))
                     return {'enable_proxy': False, 'record_flag': True}
             else:
-                log.error(f'意外的参数:"{enable_proxy}",请输入有效参数!支持的参数 - 「{valid_format}」!')
+                log.error(f'意外的參數:"{enable_proxy}",請輸入有效參數!支援的參數 - 「{valid_format}」!')
 
     @staticmethod
     @ProcessConfig.get_system_proxy('scheme')
@@ -1316,21 +1320,21 @@ class GetStdioParams:
         if valid_format is None:
             valid_format: list = ['http', 'socks4', 'socks5']
         fmt_valid_format = '|'.join(valid_format)
-        while True:  # v1.3.0 修复代理配置scheme参数配置抛出AttributeError。
+        while True:  # v1.3.0 修復代理設定scheme參數設定拋出AttributeError。
             scheme = console.input(
-                f'请输入「代理类型」。上一次的记录是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
+                f'請輸入「代理類型」。上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
                 f'格式 - 「{fmt_valid_format}」:').strip().lower()
             if scheme == '' and last_record is not None:
                 scheme = last_record
             if Validator.is_valid_scheme(scheme, valid_format):
-                console.print(f'已设置「scheme」为:「{scheme}」', style=ProcessConfig.stdio_style('scheme'))
+                console.print(f'已設定「scheme」為:「{scheme}」', style=ProcessConfig.stdio_style('scheme'))
                 return {
                     'scheme': scheme,
                     'record_flag': True
                 }
             else:
                 log.warning(
-                    f'意外的参数:"{scheme}",请输入有效的代理类型!支持的参数 - 「{fmt_valid_format}」!')
+                    f'意外的參數:"{scheme}",請輸入有效的代理類型!支援的參數 - 「{fmt_valid_format}」!')
 
     @staticmethod
     @ProcessConfig.get_system_proxy('hostname')
@@ -1338,84 +1342,84 @@ class GetStdioParams:
         hostname = None
         while True:
             scheme, _, __ = ProcessConfig.get_proxy_info(proxy_config).values()
-            # 输入代理IP地址。
+            # 輸入代理IP地址。
             try:
                 hostname = console.input(
-                    f'请输入代理类型为:"{scheme}"的「ip地址」。上一次的记录是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
+                    f'請輸入代理類型為:"{scheme}"的「ip地址」。上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
                     f'格式 - 「{valid_format}」:').strip()
                 if hostname == '' and last_record is not None:
                     hostname = last_record
                 if Validator.is_valid_hostname(hostname):
-                    console.print(f'已设置「hostname」为:「{hostname}」', style=ProcessConfig.stdio_style('hostname'))
+                    console.print(f'已設定「hostname」為:「{hostname}」', style=ProcessConfig.stdio_style('hostname'))
                     return {
                         'hostname': hostname,
                         'record_flag': True
                     }
             except ValueError:
                 log.warning(
-                    f'"{hostname}"不是一个「ip地址」,请输入有效的ipv4地址!支持的参数 - 「{valid_format}」!')
+                    f'"{hostname}"不是一個「ip地址」,請輸入有效的ipv4地址!支援的參數 - 「{valid_format}」!')
 
     @staticmethod
     @ProcessConfig.get_system_proxy('port')
     def get_port(proxy_config: dict, last_record: str, valid_format: str = '0~65535'):
         port = None
-        # 输入代理端口。
+        # 輸入代理連接埠。
         while True:
-            try:  # hostname,scheme可能出现None。
+            try:  # hostname,scheme可能出現None。
                 scheme, hostname, __ = ProcessConfig.get_proxy_info(proxy_config).values()
                 port = console.input(
-                    f'请输入ip地址为:"{hostname}",代理类型为:"{scheme}"的「代理端口」。'
-                    f'上一次的记录是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
+                    f'請輸入ip地址為:"{hostname}",代理類型為:"{scheme}"的「代理連接埠」。'
+                    f'上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
                     f'格式 - 「{valid_format}」:').strip()
                 if port == '' and last_record is not None:
                     port = last_record
                 if Validator.is_valid_port(port):
-                    console.print(f'已设置「port」为:「{port}」', style=ProcessConfig.stdio_style('port'))
+                    console.print(f'已設定「port」為:「{port}」', style=ProcessConfig.stdio_style('port'))
                     return {
                         'port': int(port),
                         'record_flag': True
                     }
                 else:
-                    log.warning(f'意外的参数:"{port}",端口号必须在「{valid_format}」之间!')
+                    log.warning(f'意外的參數:"{port}",連接埠號必須在「{valid_format}」之間!')
             except ValueError:
-                log.warning(f'意外的参数:"{port}",请输入一个有效的整数!支持的参数 - 「{valid_format}」')
+                log.warning(f'意外的參數:"{port}",請輸入一個有效的整數!支援的參數 - 「{valid_format}」')
             except Exception as e:
-                log.error(f'意外的错误,{_t(KeyWord.REASON)}:"{e}"')
+                log.error(f'意外的錯誤,{_t(KeyWord.REASON)}:"{e}"')
 
     @staticmethod
     def get_proxy_authentication():
-        # 是否需要认证。
+        # 是否需要認證。
         style = ProcessConfig.stdio_style('proxy_authentication')
         valid_format: str = 'y|n'
         while True:
-            is_proxy = console.input(f'代理是否需要「认证」? - 「{valid_format}」(默认n):').strip().lower()
+            is_proxy = console.input(f'代理是否需要「認證」? - 「{valid_format}」(預設n):').strip().lower()
             if is_proxy == 'y':
-                username = console.input('请输入「账号」:').strip()
-                password = console.input('请输入「密码」:').strip()
-                console.print(f'已设置为:「代理需要认证」', style=style)
+                username = console.input('請輸入「帳號」:').strip()
+                password = console.input('請輸入「密碼」:').strip()
+                console.print(f'已設定為:「代理需要認證」', style=style)
                 return {'username': username, 'password': password, 'record_flag': True}
             elif is_proxy in ('n', ''):
-                console.print(f'已设置为:「代理不需要认证」', style=style)
+                console.print(f'已設定為:「代理不需要認證」', style=style)
                 return {'username': None, 'password': None, 'record_flag': True}
             else:
-                log.warning(f'意外的参数:"{is_proxy}",支持的参数 - 「{valid_format}」!')
+                log.warning(f'意外的參數:"{is_proxy}",支援的參數 - 「{valid_format}」!')
 
 
 class BotCommandText:
     HELP: tuple = ('help', '展示可用命令。')
     DOWNLOAD: tuple = (
-        'download', '分配新的下载任务(多种使用方式见使用说明)。\n`/download https://t.me/x/x 起始ID 结束ID`')
-    TABLE: tuple = ('table', '在终端输出当前下载情况的统计信息。')
-    FORWARD: tuple = ('forward', '从频道A转发至频道B 起始ID 结束ID。\n`/forward https://t.me/A https://t.me/B 1 100`')
-    EXIT: tuple = ('exit', '退出软件。')
+        'download', '分配新的下載任務(多種使用方式見使用說明)。\n`/download https://t.me/x/x 起始ID 結束ID`')
+    TABLE: tuple = ('table', '在終端機輸出目前下載情況的統計資訊。')
+    FORWARD: tuple = ('forward', '從頻道A轉發至頻道B 起始ID 結束ID。\n`/forward https://t.me/A https://t.me/B 1 100`')
+    EXIT: tuple = ('exit', '退出軟件。')
     LISTEN_DOWNLOAD: tuple = ('listen_download',
-                              '实时监听该链接的最新消息(视频和图片)进行下载。\n`/listen_download https://t.me/A https://t.me/B https://t.me/n`')
+                              '即時監聽該連結的最新訊息(影片和圖片)進行下載。\n`/listen_download https://t.me/A https://t.me/B https://t.me/n`')
     LISTEN_FORWARD: tuple = (
-        'listen_forward', '实时监听该链接的最新消息(任意消息)进行转发。\n`/listen_forward 监听频道 转发频道`')
-    LISTEN_INFO: tuple = ('listen_info', '查看当前已经创建的监听信息。')
-    UPLOAD: tuple = ('upload', '上传本地的文件到指定频道。`/upload 本地文件 目标频道`')
-    UPLOAD_R: tuple = ('upload_r', '递归上传文件夹(包含子文件夹)到指定频道。`/upload_r 本地文件夹 目标频道`')
-    DOWNLOAD_CHAT: tuple = ('download_chat', '下载指定频道并支持通过内联键盘自定义内容过滤。`/download_chat 频道链接`')
+        'listen_forward', '即時監聽該連結的最新訊息(任意訊息)進行轉發。\n`/listen_forward 監聽頻道 轉發頻道`')
+    LISTEN_INFO: tuple = ('listen_info', '查看目前已經建立的監聽資訊。')
+    UPLOAD: tuple = ('upload', '上載本機的檔案到指定頻道。`/upload 本機檔案 目標頻道`')
+    UPLOAD_R: tuple = ('upload_r', '遞迴上載資料夾(包含子資料夾)到指定頻道。`/upload_r 本機資料夾 目標頻道`')
+    DOWNLOAD_CHAT: tuple = ('download_chat', '下載指定頻道並支援通過內聯鍵盤自訂內容過濾。`/download_chat 頻道連結`')
 
     @staticmethod
     def with_description(text: tuple) -> str:
@@ -1424,7 +1428,6 @@ class BotCommandText:
 
 class BotCallbackText:
     NULL: str = 'null'
-    PAY: str = 'pay'
     LINK_TABLE: str = 'link_table'
     COUNT_TABLE: str = 'count_table'
     UPLOAD_TABLE: str = 'upload_table'
@@ -1492,88 +1495,87 @@ class BotCallbackText:
 
     def __iter__(self):
         for key, value in vars(self.__class__).items():
-            if not key.startswith('__') and not callable(value):  # 排除特殊方法和属性。
+            if not key.startswith('__') and not callable(value):  # 排除特殊方法和屬性。
                 yield value
 
 
 class BotMessage:
-    RIGHT: str = '✅以下链接已创建下载任务:\n'
-    INVALID: str = '🚫以下链接不合法已被移除:\n'
+    RIGHT: str = '✅以下連結已建立下載任務:\n'
+    INVALID: str = '🚫以下連結不合法已被移除:\n'
     NOTICE: str = '📢通知:\n'
 
 
 class BotButton:
     GITHUB: str = '📦GitHub'
-    SUBSCRIBE_CHANNEL: str = '📌订阅频道'
-    VIDEO_TUTORIAL: str = '🎬视频教程'
-    PAY: str = '💰支持作者'
-    OPEN_NOTICE: str = '📢启用通知'
+    SUBSCRIBE_CHANNEL: str = '📌訂閱頻道'
+    VIDEO_TUTORIAL: str = '🎬影片教學'
+    OPEN_NOTICE: str = '📢啟用通知'
     CLOSE_NOTICE: str = '🔕禁用通知'
-    LINK_TABLE: str = '🔗链接统计表'
-    COUNT_TABLE: str = '➕计数统计表'
-    UPLOAD_TABLE: str = '📤上传统计表'
-    HELP_PAGE: str = '🛎️帮助页面'
-    CLICK_VIEW: str = '🖱点击查看'
-    CLICK_DOWNLOAD: str = '🖱点击下载'
-    DOWNLOAD: str = '⬇️下载'
-    DOWNLOAD_UPLOAD: str = '↕️下载后上传'
-    TASK_ASSIGN: str = '🌟任务已分配'
-    RETRIEVE_MESSAGE: str = '🔎检索消息中'
-    RETRIEVE_COMMENT: str = '🔎检索评论区中'
-    ASSIGNING_TASK: str = '🚛分配任务中'
-    TASK_CANCEL: str = '🗑️任务已取消'
-    EXECUTE_TASK: str = '▶️执行任务'
-    CANCEL_TASK: str = '⏹️取消任务'
-    OK: str = '✅确定'
+    LINK_TABLE: str = '🔗連結統計表'
+    COUNT_TABLE: str = '➕計數統計表'
+    UPLOAD_TABLE: str = '📤上載統計表'
+    HELP_PAGE: str = '🛎️說明頁面'
+    CLICK_VIEW: str = '🖱點擊查看'
+    CLICK_DOWNLOAD: str = '🖱點擊下載'
+    DOWNLOAD: str = '⬇️下載'
+    DOWNLOAD_UPLOAD: str = '↕️下載後上載'
+    TASK_ASSIGN: str = '🌟任務已分配'
+    RETRIEVE_MESSAGE: str = '🔎檢索訊息中'
+    RETRIEVE_COMMENT: str = '🔎檢索評論區中'
+    ASSIGNING_TASK: str = '🚛分配任務中'
+    TASK_CANCEL: str = '🗑️任務已取消'
+    EXECUTE_TASK: str = '▶️執行任務'
+    CANCEL_TASK: str = '⏹️取消任務'
+    OK: str = '✅確定'
     CANCEL: str = '❌取消'
     DROP: str = '🗑️移除'
     IGNORE: str = '👁️‍🗨️忽略'
     RETURN: str = '🔙返回'
-    CONFIRM_AND_RETURN: str = '↩️确定并返回'
-    LOOKUP_LISTEN_INFO: str = '🔍查看监听信息'
-    EXPORT_TABLE: str = '📊导出表格'
-    RESELECT: str = '🔄重新选择'
-    SETTING: str = '⚙️设置'
-    OPEN_LINK_TABLE: str = '🔓启用导出链接表格'
-    CLOSE_LINK_TABLE: str = '🔒禁用导出链接表格'
-    OPEN_COUNT_TABLE: str = '🔓启用导出计数表格'
-    CLOSE_COUNT_TABLE: str = '🔒禁用导出计数表格'
-    OPEN_UPLOAD_TABLE: str = '🔓启用导出上传表格'
-    CLOSE_UPLOAD_TABLE: str = '🔒禁用导出上传表格'
-    OPEN_EXIT_SHUTDOWN: str = '✅启用退出后关机'
-    CLOSE_EXIT_SHUTDOWN: str = '❌禁用退出后关机'
+    CONFIRM_AND_RETURN: str = '↩️確定並返回'
+    LOOKUP_LISTEN_INFO: str = '🔍查看監聽資訊'
+    EXPORT_TABLE: str = '📊匯出表格'
+    RESELECT: str = '🔄重新選擇'
+    SETTING: str = '⚙️設定'
+    OPEN_LINK_TABLE: str = '🔓啟用匯出連結表格'
+    CLOSE_LINK_TABLE: str = '🔒禁用匯出連結表格'
+    OPEN_COUNT_TABLE: str = '🔓啟用匯出計數表格'
+    CLOSE_COUNT_TABLE: str = '🔒禁用匯出計數表格'
+    OPEN_UPLOAD_TABLE: str = '🔓啟用匯出上載表格'
+    CLOSE_UPLOAD_TABLE: str = '🔒禁用匯出上載表格'
+    OPEN_EXIT_SHUTDOWN: str = '✅啟用退出後關機'
+    CLOSE_EXIT_SHUTDOWN: str = '❌禁用退出後關機'
     ALREADY_REMOVE: str = '✅已移除'
-    UPLOAD_SETTING: str = '📤上传设置'
-    DOWNLOAD_SETTING: str = '📥下载设置'
-    FORWARD_SETTING: str = '↗️转发设置'
-    OPEN_UPLOAD_DOWNLOAD: str = '🔓启用下载后上传'
-    CLOSE_UPLOAD_DOWNLOAD: str = '🔒禁用下载后上传'
-    OPEN_UPLOAD_DOWNLOAD_DELETE: str = '🔓启用下载后上传并删除'
-    CLOSE_UPLOAD_DOWNLOAD_DELETE: str = '🔒禁用下载后上传并删除'
-    VIDEO_ON: str = '🎬视频 ✅'
-    PHOTO_ON: str = '🖼️图片 ✅'
-    AUDIO_ON: str = '🎵音频 ✅'
-    VOICE_ON: str = '🎤语音 ✅'
+    UPLOAD_SETTING: str = '📤上載設定'
+    DOWNLOAD_SETTING: str = '📥下載設定'
+    FORWARD_SETTING: str = '↗️轉發設定'
+    OPEN_UPLOAD_DOWNLOAD: str = '🔓啟用下載後上載'
+    CLOSE_UPLOAD_DOWNLOAD: str = '🔒禁用下載後上載'
+    OPEN_UPLOAD_DOWNLOAD_DELETE: str = '🔓啟用下載後上載並刪除'
+    CLOSE_UPLOAD_DOWNLOAD_DELETE: str = '🔒禁用下載後上載並刪除'
+    VIDEO_ON: str = '🎬影片 ✅'
+    PHOTO_ON: str = '🖼️圖片 ✅'
+    AUDIO_ON: str = '🎵音訊 ✅'
+    VOICE_ON: str = '🎤語音 ✅'
     ANIMATION_ON: str = '🎨GIF ✅'
-    DOCUMENT_ON: str = '📄文档 ✅'
-    TEXT_ON: str = '💬文本消息 ✅'
-    VIDEO_NOTE_ON: str = '📹视频笔记 ✅'
-    LIVE_PHOTO_ON: str = '📸实况图片 ✅'
-    VIDEO_OFF: str = '🎬视频 ❌'
-    PHOTO_OFF: str = '🖼️图片 ❌'
-    AUDIO_OFF: str = '🎵音频 ❌'
-    VOICE_OFF: str = '🎤语音 ❌'
+    DOCUMENT_ON: str = '📄檔案 ✅'
+    TEXT_ON: str = '💬文字訊息 ✅'
+    VIDEO_NOTE_ON: str = '📹影片筆記 ✅'
+    LIVE_PHOTO_ON: str = '📸實況圖片 ✅'
+    VIDEO_OFF: str = '🎬影片 ❌'
+    PHOTO_OFF: str = '🖼️圖片 ❌'
+    AUDIO_OFF: str = '🎵音訊 ❌'
+    VOICE_OFF: str = '🎤語音 ❌'
     ANIMATION_OFF: str = '🎨GIF ❌'
-    DOCUMENT_OFF: str = '📄文档 ❌'
-    TEXT_OFF: str = '💬文本消息 ❌'
-    VIDEO_NOTE_OFF: str = '📹视频笔记 ❌'
-    LIVE_PHOTO_OFF: str = '📸实况图片 ❌'
-    DATE_RANGE_SETTING: str = '📅设置日期范围'
-    SELECT_START_DATE: str = '⏮️选择起始日期'
-    SELECT_END_DATE: str = '⏭️选择结束日期'
-    INPUT_KEYWORD: str = '⌨️请向我发送关键词'
-    DOWNLOAD_DTYPE_SETTING: str = '📝设置下载类型'
-    KEYWORD_FILTER_SETTING: str = '🔑设置匹配关键词'
-    CONFIRM_KEYWORD: str = '✅确认关键词'
-    INCLUDE_COMMENT: str = '✅包含评论区'
-    IGNORE_COMMENT: str = '❌包含评论区'
+    DOCUMENT_OFF: str = '📄檔案 ❌'
+    TEXT_OFF: str = '💬文字訊息 ❌'
+    VIDEO_NOTE_OFF: str = '📹影片筆記 ❌'
+    LIVE_PHOTO_OFF: str = '📸實況圖片 ❌'
+    DATE_RANGE_SETTING: str = '📅設定日期範圍'
+    SELECT_START_DATE: str = '⏮️選擇起始日期'
+    SELECT_END_DATE: str = '⏭️選擇結束日期'
+    INPUT_KEYWORD: str = '⌨️請向我發送關鍵詞'
+    DOWNLOAD_DTYPE_SETTING: str = '📝設定下載類型'
+    KEYWORD_FILTER_SETTING: str = '🔑設定匹配關鍵詞'
+    CONFIRM_KEYWORD: str = '✅確認關鍵詞'
+    INCLUDE_COMMENT: str = '✅包含評論區'
+    IGNORE_COMMENT: str = '❌包含評論區'

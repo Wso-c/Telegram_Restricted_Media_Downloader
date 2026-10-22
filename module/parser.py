@@ -7,6 +7,7 @@ from argparse import (
     SUPPRESS,
     ArgumentParser
 )
+import os
 
 from module import (
     console,
@@ -27,41 +28,41 @@ class TelegramRestrictedMediaDownloaderArgumentParser(ArgumentParser):
             '-h', '--help',
             action='help',
             default=SUPPRESS,
-            help='展示帮助'
+            help='展示說明'
         )
         self.add_argument(
             '-v', '--version',
             action='version',
             version=f'{SOFTWARE_SHORT_NAME} {VERSION_SEMVER}',
             default=SUPPRESS,
-            help='展示版本信息'
+            help='展示版本資訊'
         )
         self.add_argument(
             '-q', '--quiet',
             action='store_true',
             default=False,
-            help='跳过重新配置文件的确认提示'
+            help='跳過重新設定檔的確認提示'
         )
         self.add_argument(
             '-c', '--config',
             type=str,
             required=False,
             default='',
-            help='设置用户配置文件的路径'
+            help='設定用戶設定檔的路徑'
         )
         self.add_argument(
             '-s', '--session',
             type=str,
             required=False,
             default='',
-            help='设置会话文件的路径'
+            help='設定會話檔案的路徑'
         )
         self.add_argument(
             '-t', '--temp',
             type=str,
             required=False,
             default='',
-            help='设置运行缓存的路径'
+            help='設定執行快取的路徑'
         )
         self.add_argument(
             '-p', '--port',
@@ -70,7 +71,13 @@ class TelegramRestrictedMediaDownloaderArgumentParser(ArgumentParser):
             metavar='PORT',
             const=WebMeta.DEFAULT_PORT,
             default=WebMeta.DEFAULT_PORT,
-            help='设置网页面板的端口'
+            help='設定網頁面板的連接埠'
+        )
+        self.add_argument(
+            '--host',
+            type=str,
+            default=os.environ.get('TRMD_WEB_HOST', '127.0.0.1'),
+            help='設定網頁面板的綁定地址（預設僅本機可存取）'
         )
 
     def print_help(self, file=None):

@@ -30,7 +30,7 @@ def ready_web() -> list:
     for relative_directory in ('module/templates', 'module/static'):
         path = str(Path(relative_directory).resolve())
         if not os.path.isdir(path):
-            print(f'未找到网页面板的资源目录:"{path}"。')
+            print(f'未找到網頁面板的資源目錄:"{path}"。')
             sys.exit(1)
         web_directories.append((path, relative_directory))
     return web_directories
@@ -68,7 +68,7 @@ def check_python_version():
 
     if not version_valid:
         print(
-            f'Python版本不满足要求\n当前版本:{sys.version}\n要求范围:{".".join(map(str, MIN_PYTHON_VERSION))} ≤ Python 版本 < {".".join(map(str, MAX_PYTHON_VERSION))}\n请安装符合要求的Python版本后重试。')
+            f'Python版本不滿足要求\n目前版本:{sys.version}\n要求範圍:{".".join(map(str, MIN_PYTHON_VERSION))} ≤ Python 版本 < {".".join(map(str, MAX_PYTHON_VERSION))}\n請安裝符合要求的Python版本後重試。')
         sys.exit(1)
 
     print(f'{GRID}\nPython:\n{sys.version}\n{GRID}', flush=True)

@@ -1,40 +1,45 @@
-/* TRMD Web UI — 前端脚本(含从 telegram-tt 移植的渐变背景实现)
+/* TRMD Web UI — 前端腳本(含從 telegram-tt 移植的漸變背景實現)
  * Copyright © 2024-2026 Gentlesprite
  * SPDX-License-Identifier: GPL-3.0-only
- * 本文件整体以 GNU GPL-3.0 授权;完整许可见仓库根目录 LICENCE。
+ * 本檔案整體以 GNU GPL-3.0 授權;完整許可見倉庫根目錄 LICENCE。
  */
 const EMPTY_SUMMARY = {percent: 0, info: '0.00B / 0.00B', speed: '', remaining: ''};
 
 var SECTIONS = {
     download: ['download'],
     upload: ['upload'],
-    listener: ['listener']
+    listener: ['listener'],
+    admin: ['admin']
 };
-var PAGES = SECTIONS.download.concat(SECTIONS.upload, SECTIONS.listener);  // 下载、上传各一个页面,监听页只在内部切换选项卡。
+var PAGES = SECTIONS.download.concat(SECTIONS.upload, SECTIONS.listener, SECTIONS.admin);  // 各側邊欄頁面。
 var SUMMARY_IDS = {
     download: {fill: 'overallFill', percent: 'overallPercent', info: 'overallInfo', extra: 'overallExtra'},
     upload: {fill: 'uploadFill', percent: 'uploadPercent', info: 'uploadInfo', extra: 'uploadExtra'}
-};  // 下载与上传各自独立的总进度面板,避免相互覆盖。
+};  // 下載與上載各自獨立的總進度面板,避免相互覆蓋。
 var SECTION_KEY = 'trmd_section';
 var LISTEN_KEY = 'trmd_listen';
-var HAS_BOT = document.body.getAttribute('data-bot') === '1';  // 是否配置了机器人,决定上传/监听侧边栏是否展示(无机器人时只有下载可用)。
-var COLLAPSE_KEY = 'trmd_collapsed';  // 各分组折叠状态的本地存储键。
-var ALL_KEY = 'trmd_all_collapsed';  // 下载页全部折叠开关的本地存储键。
-var UPLOAD_ALL_KEY = 'trmd_upload_all_collapsed';  // 上传页全部折叠开关的本地存储键。
-var LINK_LAST_KEY = 'trmd_link_last';  // 下载页链接层最后一次手动选择的本地存储键。
-var UPLOAD_LAST_KEY = 'trmd_upload_last';  // 上传页频道层最后一次手动选择的本地存储键。
-var LISTEN_TABS = ['forward', 'download'];  // 监听页的选项卡:转发、下载。
+var HAS_BOT = document.body.getAttribute('data-bot') === '1';  // 是否設定了機械人,決定上載/監聽側邊欄是否展示(無機械人時只有下載可用)。
+var COLLAPSE_KEY = 'trmd_collapsed';  // 各分組摺疊狀態的本機儲存鍵。
+var ALL_KEY = 'trmd_all_collapsed';  // 下載頁全部摺疊開關的本機儲存鍵。
+var UPLOAD_ALL_KEY = 'trmd_upload_all_collapsed';  // 上載頁全部摺疊開關的本機儲存鍵。
+var LINK_LAST_KEY = 'trmd_link_last';  // 下載頁連結層最後一次手動選擇的本機儲存鍵。
+var UPLOAD_LAST_KEY = 'trmd_upload_last';  // 上載頁頻道層最後一次手動選擇的本機儲存鍵。
+var LISTEN_TABS = ['forward', 'download'];  // 監聽頁的選項卡:轉發、下載。
 
 var STATE_TEXT = {
-    pending: '队列中',  // 排队中,尚未开始处理(对应后端 DownloadStatus.PENDING)。
-    downloading: '下载中',
+    pending: '佇列中',  // 排隊中,尚未開始處理(對應後端 DownloadStatus.PENDING)。
+    downloading: '下載中',
+    paused: '已暫停',
+    cancelled: '已取消',
     success: '已完成',
-    skip: '已跳过',
-    failure: '失败'
+    skip: '已跳過',
+    failure: '失敗'
 };
 var STATE_CLASS = {
     pending: 'status-pending',
     downloading: 'status-running',
+    paused: 'status-pending',
+    cancelled: 'status-skip',
     success: 'status-done',
     skip: 'status-skip',
     failure: 'status-failed'
@@ -42,25 +47,31 @@ var STATE_CLASS = {
 var STATE_ICON = {
     pending: '⏳',
     downloading: '📥',
+    paused: '⏸️',
+    cancelled: '⏹️',
     success: '✅',
     skip: '⏭',
     failure: '❌'
 };
 
-var HEAD_LABELS = ['频道', '频道 / 链接', '频道 / 链接 / 名称'];  // 表头首列随当前展开的层级变化。
-var SIZE_LABELS = ['完成 / 总数', '完成 / 总数', '数量 / 大小'];  // 第三列同理,分组行是数量,成员行才是字节大小。
-var UPLOAD_HEAD_NAME = ['频道', '频道 / 文件路径'];  // 上传页只有频道与文件两级。
-var UPLOAD_HEAD_SIZE = ['完成 / 总数', '大小'];
+var HEAD_LABELS = ['頻道', '頻道 / 連結', '頻道 / 連結 / 名稱'];  // 表頭首列隨目前展開的層級變化。
+var SIZE_LABELS = ['完成 / 總數', '完成 / 總數', '數量 / 大小'];  // 第三列同理,分組行是數量,成員行才是位元組大小。
+var UPLOAD_HEAD_NAME = ['頻道', '頻道 / 檔案路徑'];  // 上載頁只有頻道與檔案兩級。
+var UPLOAD_HEAD_SIZE = ['完成 / 總數', '大小'];
 var UPLOAD_TEXT = {
-    pending: '队列中',
-    uploading: '上传中',
+    pending: '佇列中',
+    uploading: '上載中',
+    paused: '已暫停',
+    cancelled: '已取消',
     success: '已完成',
     sent: '已完成',
-    failure: '失败'
+    failure: '失敗'
 };
 var UPLOAD_CLASS = {
     pending: 'status-pending',
     uploading: 'status-running',
+    paused: 'status-pending',
+    cancelled: 'status-skip',
     success: 'status-done',
     sent: 'status-done',
     failure: 'status-failed'
@@ -68,6 +79,8 @@ var UPLOAD_CLASS = {
 var UPLOAD_ICON = {
     pending: '⏳',
     uploading: '📤',
+    paused: '⏸️',
+    cancelled: '⏹️',
     success: '✅',
     sent: '✅',
     failure: '❌'
@@ -75,15 +88,15 @@ var UPLOAD_ICON = {
 var collapsed = {};
 var allCollapsed = false;
 var uploadAllCollapsed = false;
-var lastLinkCollapsed = true;  // 下载页链接层最后的手动选择,缺省折叠以保持原有默认。
-var lastUploadCollapsed = false;  // 上传页频道层最后的手动选择,缺省展开以保持原有默认。
-var UNGROUPED_NAME = '未分组';
+var lastLinkCollapsed = true;  // 下載頁連結層最後的手動選擇,缺省摺疊以保持原有預設。
+var lastUploadCollapsed = false;  // 上載頁頻道層最後的手動選擇,缺省展開以保持原有預設。
+var UNGROUPED_NAME = '未分組';
 var currentSection = 'download';
 var currentListen = 'forward';
 var lastDownloadActive = 0;
 var lastUploadActive = 0;
 var lastListenCount = 0;
-var lastUploadFinished = 0;  // 上传已结束(成功 + 失败)的任务数,用于驱动背景渐变步进。
+var lastUploadFinished = 0;  // 上載已結束(成功 + 失敗)的任務數,用於驅動背景漸變步進。
 
 function esc(text) {
     var div = document.createElement('div');
@@ -100,13 +113,13 @@ function dash(text) {
 }
 
 function progressCell(percent) {
-    // --p 供手机端把横向条换成圆环时使用(带 % 的完整角度值);桌面端不读取,无副作用。
+    // --p 供手機端把橫向條換成圓環時使用(帶 % 的完整角度值);桌面端不讀取,無副作用。
     return '<span class="cell-progress" style="--p:' + percent + '%">' +
         '<span class="track"><span class="fill" style="width:' + percent + '%"></span></span>' +
         '<span class="pct">' + percent + '%</span></span>';
 }
 
-var SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];  // 与终端的十进制单位保持一致。
+var SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];  // 與終端機的十進制單位保持一致。
 
 function sizeText(bytes) {
     var value = Number(bytes) || 0;
@@ -126,7 +139,7 @@ function secondsText(seconds) {
     if (total < 3600) {
         return Math.floor(total / 60) + '分' + (total % 60) + '秒';
     }
-    return Math.floor(total / 3600) + '时' + Math.floor(total % 3600 / 60) + '分' + (total % 60) + '秒';
+    return Math.floor(total / 3600) + '時' + Math.floor(total % 3600 / 60) + '分' + (total % 60) + '秒';
 }
 
 function groupStat(members, live) {
@@ -134,9 +147,9 @@ function groupStat(members, live) {
     var left = 0;
     for (var i = 0; i < members.length; i++) {
         var member = members[i];
-        var task = live[member.task_id] || member;  // 上传成员自带进度字段,查不到进度条任务时回退到自身。
-        if (member.state === 'success' || member.state === 'skip' || member.state === 'sent') {
-            continue;  // 已完成、已跳过、已发送的成员不再计入速度与剩余。
+        var task = live[member.task_id] || member;  // 上載成員自帶進度字段,查不到進度列任務時回退到自身。
+        if (member.state === 'success' || member.state === 'skip' || member.state === 'sent' || member.state === 'cancelled') {
+            continue;  // 已完成、已跳過、已發送的成員不再計入速度與剩餘。
         }
         if (task && task.speed_value) {
             speed += Number(task.speed_value) || 0;
@@ -153,30 +166,62 @@ function groupStatCells(stat) {
         '<span class="cell-remain">' + remain + '</span>';
 }
 
-function taskRow(task) {
+function taskActions(state, link, messageId, kind, id, pauseRequested, cancelRequested) {
+    if (cancelRequested) {
+        return '<span class="admin-feedback">取消中…</span>';
+    }
+    if (pauseRequested) {
+        return '<span class="admin-feedback">暫停中…</span>';
+    }
+    var actions = [];
+    if (state === 'pending' || state === 'downloading' || state === 'uploading') {
+        actions.push(['pause', '暫停', false], ['cancel', '取消', true]);
+    } else if (state === 'paused') {
+        actions.push(['resume', '繼續', false], ['cancel', '取消', true]);
+    } else if (state === 'failure') {
+        actions.push(['retry', '重試', false]);
+    }
+    if (!actions.length) {
+        return '';
+    }
+    return '<span class="task-actions">' + actions.map(function (action) {
+        var attrs = kind === 'download' ?
+            ' data-link="' + escAttr(link) + '" data-message-id="' + escAttr(messageId) + '"' :
+            ' data-task-id="' + escAttr(id) + '"';
+        return '<button class="task-action' + (action[2] ? ' danger' : '') +
+            '" type="button" data-task-kind="' + kind + '" data-action="' + action[0] + '"' +
+            attrs + '>' + action[1] + '</button>';
+    }).join('') + '</span>';
+}
+
+function taskRow(task, member, link) {
     var done = task.percent >= 100;
-    // data-task-id 供"列表结构未变时就地更新进度",避免每秒整表重建。
-    return '<div class="task-row" data-task-id="' + escAttr(task.id) + '">' +
+    var state = member.state || 'downloading';
+    var stateText = STATE_TEXT[state] || '下載中';
+    // data-task-id 供"列表結構未變時就地更新進度",避免每秒整表重建。
+    return '<div class="task-row member-row" data-task-id="' + escAttr(task.id) + '">' +
         '<span class="cell-name"><span class="ficon">' + esc(task.type || '📄') + '</span>' +
         '<span class="fname" title="' + escAttr(task.filename) + '">' + esc(task.filename) + '</span></span>' +
         progressCell(task.percent) +
         '<span class="cell-size">' + dash(task.info) + '</span>' +
         '<span class="cell-speed">' + dash(task.speed) + '</span>' +
         '<span class="cell-remain">' + dash(task.remaining) + '</span>' +
-        '<span class="cell-status ' + (done ? 'status-done' : 'status-running') + '">' +
-        (done ? '已完成' : '下载中') + '</span>' +
+        '<span class="cell-status ' + (done ? 'status-done' : (STATE_CLASS[state] || 'status-running')) + '">' +
+        (done ? '已完成' : stateText) +
+        taskActions(state, link, member.message_id, 'download', '', member.pause_requested, member.cancel_requested) +
+        '</span>' +
         '</div>';
 }
 
-function memberRow(item) {
+function memberRow(item, link) {
     var state = item.state || 'pending';
-    var text = STATE_TEXT[state] || '队列中';
+    var text = STATE_TEXT[state] || '佇列中';
     var cls = STATE_CLASS[state] || 'status-pending';
     var pending = state === 'pending';
     var progress;
     if (state === 'success') {
         progress = progressCell(100);
-    } else if (item.note) {  // 不支持或被忽略的类型拿不到文件类型,进度栏改为显示具体原因,避免与普通跳过混淆。
+    } else if (item.note) {  // 不支援或被忽略的類型拿不到檔案類型,進度欄改為顯示具體原因,避免與普通跳過混淆。
         progress = '<span class="cell-progress"><span class="pct note" title="' + escAttr(item.note) + '">' +
             esc(item.note) + '</span></span>';
     } else {
@@ -191,24 +236,30 @@ function memberRow(item) {
         '<span class="cell-size">' + dash(item.size) + '</span>' +
         '<span class="cell-speed">—</span>' +
         '<span class="cell-remain">—</span>' +
-        '<span class="cell-status ' + cls + '">' + text + '</span>' +
+        '<span class="cell-status ' + cls + '">' + text +
+        taskActions(state, link, item.message_id, 'download', '', item.pause_requested, item.cancel_requested) +
+        '</span>' +
         '</div>';
 }
 
 function linkStatusCell(link) {
     var remaining = link.remaining || 0;
     var failed = link.failed || 0;
+    var cancelled = link.cancelled || 0;
     if (remaining) {
-        return '<span class="cell-status status-pending">剩 ' + remaining + ' 条</span>';
+        return '<span class="cell-status status-pending">剩 ' + remaining + ' 條</span>';
     }
     if (failed) {
-        return '<span class="cell-status status-failed">失败 ' + failed + ' 条</span>';
+        return '<span class="cell-status status-failed">失敗 ' + failed + ' 條</span>';
+    }
+    if (cancelled && cancelled === link.total) {
+        return '<span class="cell-status status-skip">已取消</span>';
     }
     return '<span class="cell-status status-done">已完成</span>';
 }
 
 function getChannelGroups(links) {
-    var groups = [];  // 按频道分组下载链接,保持频道首次出现的顺序。
+    var groups = [];  // 按頻道分組下載連結,保持頻道首次出現的順序。
     var index = {};
     var i;
     for (i = 0; i < links.length; i++) {
@@ -220,7 +271,7 @@ function getChannelGroups(links) {
         var group = groups[index[channel]];
         var name = links[i].channel_name || channel;
         if (name.length > group.name.length) {
-            group.name = name;  // 同一频道取信息最全的名称,"标题(ID)"比纯ID长。
+            group.name = name;  // 同一頻道取資訊最全的名稱,"標題(ID)"比純ID長。
         }
         group.links.push(links[i]);
     }
@@ -231,15 +282,17 @@ function getChannelGroups(links) {
         channelGroup.member = 0;
         channelGroup.remaining = 0;
         channelGroup.failed = 0;
-        channelGroup.members = [];  // 汇总该频道下所有链接的成员,用于计算频道级速度与剩余时间。
+        channelGroup.cancelled = 0;
+        channelGroup.members = [];  // 彙總該頻道下所有連結的成員,用於計算頻道級速度與剩餘時間。
         for (var j = 0; j < channelGroup.links.length; j++) {
             channelGroup.complete += channelGroup.links[j].complete || 0;
             channelGroup.member += channelGroup.links[j].member || 0;
             channelGroup.remaining += channelGroup.links[j].remaining || 0;
             channelGroup.failed += channelGroup.links[j].failed || 0;
+            channelGroup.cancelled += channelGroup.links[j].cancelled || 0;
             channelGroup.members = channelGroup.members.concat(channelGroup.links[j].queue || []);
         }
-        var base = channelGroup.member - channelGroup.failed;  // 彻底失败的成员退出进度基数,避免进度永远到不了100%。
+        var base = channelGroup.member - channelGroup.failed - channelGroup.cancelled;
         channelGroup.percent = base ?
             Math.round(channelGroup.complete / base * 1000) / 10 : 0;
     }
@@ -249,7 +302,7 @@ function getChannelGroups(links) {
 function channelBlock(group, live) {
     var key = 'channel:' + group.channel;
     var filtering = Boolean(statFilter.download);
-    // 筛选时强制展开,避免结果被折叠状态藏起来。
+    // 篩選時強制展開,避免結果被摺疊狀態藏起來。
     var isCollapsed = filtering ? false : (collapsed[key] === undefined ? allCollapsed : collapsed[key]);
     var stat = groupStat(group.members || [], live);
     var html = '<div class="group' + (isCollapsed ? '' : ' open') + '" data-channel="' + escAttr(key) + '" data-level="1">' +
@@ -258,7 +311,7 @@ function channelBlock(group, live) {
         '<span class="ficon">📺</span>' +
         '<span class="gname" title="' + escAttr(group.name || group.channel) + '">' +
         esc(group.name || group.channel) + '</span>' +
-        '<span class="gcount">' + group.count + ' 个链接</span></span>' +
+        '<span class="gcount">' + group.count + ' 個連結</span></span>' +
         progressCell(group.percent) +
         '<span class="cell-size">' + group.complete + '/' + group.member + '</span>' +
         groupStatCells(stat) +
@@ -270,7 +323,7 @@ function channelBlock(group, live) {
         body += linkBlock(group.links[i], live);
     }
     if (filtering && !body) {
-        return '';  // 筛选后该频道下没有任何匹配内容,整组不显示。
+        return '';  // 篩選後該頻道下沒有任何匹配內容,整組不顯示。
     }
     return html + body + '</div></div>';
 }
@@ -283,15 +336,15 @@ function linkBlock(link, live) {
     if (filtering) {
         members = all.filter(matchDownloadState);
         if (members.length === 0) {
-            return '';  // 筛选后无匹配成员,不再显示该链接。
+            return '';  // 篩選後無匹配成員,不再顯示該連結。
         }
     } else {
-        // 无筛选卡片时按状态置顶:进行中 > 队列中 > 已完成/已跳过 > 失败,使活跃任务集中显示在最上方。
+        // 無篩選卡片時按狀態置頂:進行中 > 佇列中 > 已完成/已跳過 > 失敗,使活躍任務集中顯示在最上方。
         members = members.slice().sort(function (a, b) {
             return stateRank(a.state) - stateRank(b.state);
         });
     }
-    // 筛选时强制展开,否则结果会被折叠状态藏起来。
+    // 篩選時強制展開,否則結果會被摺疊狀態藏起來。
     var isCollapsed = filtering ? false : (collapsed[key] === undefined ? lastLinkCollapsed : collapsed[key]);
     var stat = groupStat(all, live);
     var html = '<div class="group' + (isCollapsed ? '' : ' open') + '" data-channel="' + escAttr(key) + '" data-level="2">' +
@@ -299,7 +352,7 @@ function linkBlock(link, live) {
         '<span class="cell-name"><span class="arrow"></span>' +
         '<span class="ficon">🔗</span>' +
         '<span class="fname" title="' + escAttr(link.link) + '">' + esc(link.link) + '</span>' +
-        '<span class="gcount">' + (link.queue_total || 0) + ' 条未完成 / 共 ' + (link.total || 0) + ' 条</span></span>' +
+        '<span class="gcount">' + (link.queue_total || 0) + ' 條未完成 / 共 ' + (link.total || 0) + ' 條</span></span>' +
         progressCell(link.percent) +
         '<span class="cell-size">' + link.complete + '/' + link.member + '</span>' +
         groupStatCells(stat) +
@@ -309,10 +362,10 @@ function linkBlock(link, live) {
     for (var i = 0; i < members.length; i++) {
         var member = members[i];
         var task = member.state === 'downloading' ? live[member.task_id] : null;
-        html += task ? taskRow(task) : memberRow(member);  // 下载中的成员直接复用进度条任务行。
+        html += task ? taskRow(task, member, link.link) : memberRow(member, link.link);  // 下載中的成員複用即時進度行。
     }
     if (members.length === 0) {
-        html += '<div class="more">该链接暂无消息。</div>';
+        html += '<div class="more">該連結暫無訊息。</div>';
     }
     return html + '</div></div>';
 }
@@ -320,7 +373,7 @@ function linkBlock(link, live) {
 function groupVisible(node) {
     for (var parent = node.parentNode; parent; parent = parent.parentNode) {
         if (parent.style && parent.style.display === 'none') {
-            return false;  // 任一层祖先被折叠,该分组即不可见。
+            return false;  // 任一層祖先被摺疊,該分組即不可見。
         }
     }
     return true;
@@ -332,11 +385,11 @@ function syncHeadLabel() {
     for (var i = 0; i < nodes.length; i++) {
         var depth = nodes[i].getAttribute('data-level') === '2' ? 3 : 2;
         if (depth > level && groupVisible(nodes[i])) {
-            level = depth;  // 取当前可见的最深层级。
+            level = depth;  // 取目前可見的最深層級。
         }
     }
     document.getElementById('headName').querySelector('.htext').textContent = HEAD_LABELS[level - 1];
-    document.getElementById('headSize').querySelector('.htext').textContent = SIZE_LABELS[level - 1];  // 分组行是条数,成员行才是字节。
+    document.getElementById('headSize').querySelector('.htext').textContent = SIZE_LABELS[level - 1];  // 分組行是條數,成員行才是位元組。
 }
 
 function bindGroups() {
@@ -346,16 +399,16 @@ function bindGroups() {
             var group = this.parentNode;
             var key = this.getAttribute('data-channel');
             var body = group.querySelector('.group-body');
-            var hide = body.style.display !== 'none';  // 当前是展开的,点击后折叠。
+            var hide = body.style.display !== 'none';  // 目前是展開的,點擊後摺疊。
             body.style.display = hide ? 'none' : '';
             group.className = hide ? 'group' : 'group open';
             collapsed[key] = hide;
-            saveState(COLLAPSE_KEY, JSON.stringify(collapsed));  // 记住本次折叠,刷新后恢复。
+            saveState(COLLAPSE_KEY, JSON.stringify(collapsed));  // 記住本次摺疊,重新整理後恢復。
             if (group.getAttribute('data-level') === '2') {
-                lastLinkCollapsed = hide;  // 下载页链接层的手动选择。
+                lastLinkCollapsed = hide;  // 下載頁連結層的手動選擇。
                 saveState(LINK_LAST_KEY, hide ? '1' : '0');
             } else if (group.closest('#upload')) {
-                lastUploadCollapsed = hide;  // 上传页频道层的手动选择。
+                lastUploadCollapsed = hide;  // 上載頁頻道層的手動選擇。
                 saveState(UPLOAD_LAST_KEY, hide ? '1' : '0');
             }
             syncHeadLabel();
@@ -365,11 +418,11 @@ function bindGroups() {
 }
 
 function syncToggleAll() {
-    document.getElementById('toggleAll').textContent = allCollapsed ? '全部展开' : '全部折叠';
+    document.getElementById('toggleAll').textContent = allCollapsed ? '全部展開' : '全部摺疊';
 }
 
 function syncToggleUpload() {
-    document.getElementById('toggleUpload').textContent = uploadAllCollapsed ? '全部展开' : '全部折叠';
+    document.getElementById('toggleUpload').textContent = uploadAllCollapsed ? '全部展開' : '全部摺疊';
 }
 
 function setAllGroups(selector, hide) {
@@ -381,12 +434,12 @@ function setAllGroups(selector, hide) {
         nodes[i].className = hide ? 'group' : 'group open';
         collapsed[key] = hide;
     }
-    saveState(COLLAPSE_KEY, JSON.stringify(collapsed));  // 批量折叠后同样落盘,刷新后保持。
+    saveState(COLLAPSE_KEY, JSON.stringify(collapsed));  // 批量摺疊後同樣落盤,重新整理後保持。
     if (selector === '#download') {
-        lastLinkCollapsed = hide;  // 批量操作同样视为一次链接层选择。
+        lastLinkCollapsed = hide;  // 批量操作同樣視為一次連結層選擇。
         saveState(LINK_LAST_KEY, hide ? '1' : '0');
     } else {
-        lastUploadCollapsed = hide;  // 批量操作同样视为一次频道层选择。
+        lastUploadCollapsed = hide;  // 批量操作同樣視為一次頻道層選擇。
         saveState(UPLOAD_LAST_KEY, hide ? '1' : '0');
     }
 }
@@ -411,7 +464,7 @@ function saveState(key, value) {
     try {
         localStorage.setItem(key, value);
     } catch (e) {
-        // 隐私模式下写入失败可忽略。
+        // 隱私模式下寫入失敗可忽略。
     }
 }
 
@@ -423,13 +476,13 @@ function applySection() {
     }
     var dlWasHidden = document.getElementById('downloadSummary').hidden;
     document.getElementById('downloadSummary').hidden = currentSection !== 'download';
-    document.getElementById('uploadSummary').hidden = currentSection !== 'upload';  // 两个板块各自独立的总进度。
+    document.getElementById('uploadSummary').hidden = currentSection !== 'upload';  // 兩個板塊各自獨立的總進度。
     for (i = 0; i < PAGES.length; i++) {
         document.getElementById('page-' + PAGES[i]).hidden = PAGES[i] !== currentSection;
     }
     renderStatus();
-    // 下载总进度卡片刚变为可见时,用最新数据强制重绘一次进度条,
-    // 避免首屏或切回下载页时它在隐藏态下渲染、进度条被跳过/未显示。
+    // 下載總進度卡片剛變為可見時,用最新資料強制重繪一次進度列,
+    // 避免首屏或切回下載頁時它在隱藏態下渲染、進度列被跳過/未顯示。
     if (currentSection === 'download' && dlWasHidden) {
         refresh(true);
     }
@@ -439,26 +492,26 @@ function switchSection(name) {
     if (!SECTIONS[name]) {
         name = 'download';
     }
-    if (!HAS_BOT && name !== 'download') {  // 未配置机器人时仅允许下载页,避免停留在不可用的上传/监听页。
+    if (!HAS_BOT && (name === 'upload' || name === 'listener')) {
         name = 'download';
     }
     currentSection = name;
     applySection();
     saveState(SECTION_KEY, currentSection);
+    if (currentSection === 'admin') {
+        loadAdminControlData();
+        connectAdminLogStream();
+    } else {
+        disconnectAdminLogStream();
+    }
 }
 
 function applyBotVisibility() {
-    // 未配置机器人时只有下载一个功能,无需用侧边栏区分页面,直接隐藏整个侧边栏并将布局退化为单栏。
-    if (HAS_BOT) {
-        return;
-    }
-    var sidebar = document.getElementById('sidebar');
-    if (sidebar) {
-        sidebar.hidden = true;
-    }
-    var layout = document.querySelector('.layout');
-    if (layout && !layout.classList.contains('layout-single')) {
-        layout.classList.add('layout-single');
+    if (!HAS_BOT) {
+        var items = document.querySelectorAll('.side-item[data-section="upload"], .side-item[data-section="listener"]');
+        for (var i = 0; i < items.length; i++) {
+            items[i].hidden = true;
+        }
     }
 }
 
@@ -487,7 +540,7 @@ function extraText(item) {
         extra += item.speed;
     }
     if (item.remaining) {
-        extra += (extra ? ' · 剩余' : '剩余') + item.remaining;
+        extra += (extra ? ' · 剩餘' : '剩餘') + item.remaining;
     }
     return extra;
 }
@@ -498,25 +551,25 @@ function renderOverall(summary, taskCount, ids) {
     document.getElementById(ids.percent).textContent = data.percent + '%';
     document.getElementById(ids.info).textContent = data.info;
     document.getElementById(ids.extra).textContent =
-        extraText(data) ? extraText(data) : (taskCount ? '正在测速' : '暂无速度');
+        extraText(data) ? extraText(data) : (taskCount ? '正在測速' : '暫無速度');
 }
 
-/* 统计卡筛选:点击后只显示对应状态的条目,再次点击取消。 */
+/* 統計卡篩選:點擊後只顯示對應狀態的條目,再次點擊取消。 */
 var statFilter = {download: '', upload: ''};
 
-// 筛选后无匹配项时的空态文案,与统计卡片的筛选口径保持一致。
+// 篩選後無匹配項時的空態文案,與統計卡片的篩選口徑保持一致。
 var DOWNLOAD_EMPTY_TEXT = {
-    success: '暂无成功的下载任务。',
-    failure: '暂无失败的下载任务。',
-    skip: '暂无跳过的下载任务。',
-    active: '暂无下载中的任务。',
-    queue: '暂无队列中的下载任务。'
+    success: '暫無成功的下載任務。',
+    failure: '暫無失敗的下載任務。',
+    skip: '暫無跳過的下載任務。',
+    active: '暫無下載中的任務。',
+    queue: '暫無佇列中的下載任務。'
 };
 var UPLOAD_EMPTY_TEXT = {
-    success: '暂无上传成功的任务。',
-    failure: '暂无上传失败的任务。',
-    uploading: '暂无上传中的任务。',
-    pending: '暂无队列中的上传任务。'
+    success: '暫無上載成功的任務。',
+    failure: '暫無上載失敗的任務。',
+    uploading: '暫無上載中的任務。',
+    pending: '暫無佇列中的上載任務。'
 };
 
 function statCell(label, value, cls, filter, scope) {
@@ -527,12 +580,12 @@ function statCell(label, value, cls, filter, scope) {
     var active = statFilter[scope] === filter;
     return '<div class="' + (active ? 'active ' : '') + '"' +
         ' data-filter="' + filter + '" data-scope="' + scope + '"' +
-        ' title="点击' + (active ? '取消筛选' : '只查看' + label) + '">' +
+        ' title="點擊' + (active ? '取消篩選' : '只查看' + label) + '">' +
         '<span>' + label + '</span><b' + (cls ? ' class="' + cls + '"' : '') + '>' +
         value + '</b></div>';
 }
 
-// 判断下载成员是否命中当前筛选。
+// 判斷下載成員是否命中目前篩選。
 function matchDownloadState(member) {
     var state = member.state || 'pending';
     var filter = statFilter.download;
@@ -554,8 +607,8 @@ function matchDownloadState(member) {
     return true;
 }
 
-/* 统计"队列中"的成员数:只算排队中的,不含正在下载的。
-   后端 data.queue 是"未完成总数"(含下载中),直接显示会导致队列数与进行中重复。 */
+/* 統計"佇列中"的成員數:只算排隊中的,不含正在下載的。
+   後端 data.queue 是"未完成總數"(含下載中),直接顯示會導致佇列數與進行中重複。 */
 function countQueueMembers(links) {
     var total = 0;
     for (var i = 0; i < (links || []).length; i++) {
@@ -570,7 +623,7 @@ function countQueueMembers(links) {
     return total;
 }
 
-// 判断上传文件是否命中指定筛选,与 uploadCount 的分类口径保持一致。
+// 判斷上載檔案是否命中指定篩選,與 uploadCount 的分類口徑保持一致。
 function matchUploadState(file, filter) {
     var state = file.state || 'pending';
     if (filter === 'success') {
@@ -585,7 +638,7 @@ function matchUploadState(file, filter) {
     if (filter === 'pending') {
         return !uploadDone(file) && state !== 'failure' && state !== 'uploading';
     }
-    return true;  // 文件总数等:不过滤。
+    return true;  // 檔案總數等:不過濾。
 }
 
 
@@ -597,13 +650,13 @@ function bindStatFilter() {
         }
         var scope = cell.getAttribute('data-scope') || 'download';
         var value = cell.getAttribute('data-filter') || '';
-        statFilter[scope] = statFilter[scope] === value ? '' : value;  // 再次点击取消筛选。
-        // 筛选状态属于界面状态、不在快照数据里,必须清空指纹强制重绘,
-        // 否则会因"数据未变化"被跳过,导致点击无反应。
+        statFilter[scope] = statFilter[scope] === value ? '' : value;  // 再次點擊取消篩選。
+        // 篩選狀態屬於介面狀態、不在快照資料裏,必須清空指紋強制重繪,
+        // 否則會因"資料未變化"被跳過,導致點擊無反應。
         lastRenderKey = '';
         lastStructKey = null;
         lastUploadStructKey = null;
-        refresh();  // 立即按新筛选重绘,无需等待下一次轮询。
+        refresh();  // 立即按新篩選重繪,無需等待下一次輪詢。
     });
 }
 
@@ -612,49 +665,49 @@ function renderStat(id, cells) {
 }
 
 function renderStatus() {
-    // 下载、上传、监听三个板块的活跃情况统一显示在顶栏左侧,不再跟随当前板块切换。
+    // 下載、上載、監聽三個板塊的活躍情況統一顯示在頂欄左側,不再跟隨目前板塊切換。
     var parts = [];
     if (lastDownloadActive) {
-        parts.push('下载 ' + lastDownloadActive);
+        parts.push('下載 ' + lastDownloadActive);
     }
     if (lastUploadActive) {
-        parts.push('上传 ' + lastUploadActive);
+        parts.push('上載 ' + lastUploadActive);
     }
     if (lastListenCount) {
-        parts.push('监听 ' + lastListenCount);
+        parts.push('監聽 ' + lastListenCount);
     }
     var active = parts.length > 0;
     document.getElementById('dot').className = active ? 'dot active' : 'dot';
-    document.getElementById('statusText').textContent = active ? parts.join(' · ') : '空闲 · 等待任务';
+    document.getElementById('statusText').textContent = active ? parts.join(' · ') : '空閒 · 等待任務';
 }
 
 function renderList(data) {
-    var live = {};  // 进度条任务ID -> 任务,供下载中的成员复用实时进度。
+    var live = {};  // 進度列任務ID -> 任務,供下載中的成員複用即時進度。
     var i;
     for (i = 0; i < (data.tasks || []).length; i++) {
         live[data.tasks[i].id] = data.tasks[i];
     }
     var html = '';
-    var groups = getChannelGroups(data.links || []);  // 频道 > 链接 > 下载信息,两级可折叠。
+    var groups = getChannelGroups(data.links || []);  // 頻道 > 連結 > 下載資訊,兩級可摺疊。
     for (i = 0; i < groups.length; i++) {
         html += channelBlock(groups[i], live);
     }
-    /* 空态以"该链接下是否还有成员(含已完成的)"判断,而非"是否有正在下载的任务"。
-       否则全部下载完成后 data.tasks 为空,已完成的成员会被空态整块隐藏,
-       需新建任务才重新出现。 */
-    // 处于筛选状态时,无匹配项应提示具体的筛选条件,而非笼统的"暂无下载任务。"。
-    var emptyText = '暂无下载任务。';
+    /* 空態以"該連結下是否還有成員(含已完成的)"判斷,而非"是否有正在下載的任務"。
+       否則全部下載完成後 data.tasks 為空,已完成的成員會被空態整塊隱藏,
+       需新建任務才重新出現。 */
+    // 處於篩選狀態時,無匹配項應提示具體的篩選條件,而非籠統的"暫無下載任務。"。
+    var emptyText = '暫無下載任務。';
     if (statFilter.download) {
         emptyText = DOWNLOAD_EMPTY_TEXT[statFilter.download] || emptyText;
     }
     document.getElementById('download').innerHTML = html ? html : '<div class="empty">' + emptyText + '</div>';
     syncToggleAll();
-    bindGroups();  // 页面渲染完成后统一绑定折叠事件。
+    bindGroups();  // 頁面渲染完成後統一綁定摺疊事件。
     syncHeadLabel();
 }
 
 function listenRow(kind, source, target) {
-    var link = target ? source + ' ' + target : source;  // 与后端监听字典的键保持一致。
+    var link = target ? source + ' ' + target : source;  // 與後端監聽字典的鍵保持一致。
     var html = '<div class="task-row">' +
         '<span class="cell-name"><span class="ficon">🕵️</span>' +
         '<span class="fname" title="' + escAttr(source) + '">' + esc(source) + '</span></span>';
@@ -662,7 +715,7 @@ function listenRow(kind, source, target) {
         html += '<span class="cell-name"><span class="ficon">➡️</span>' +
             '<span class="fname" title="' + escAttr(target) + '">' + esc(target) + '</span></span>';
     }
-    html += '<span class="cell-action"><button class="btn-del" type="button" title="移除该监听"' +
+    html += '<span class="cell-action"><button class="btn-del" type="button" title="移除該監聽"' +
         ' data-kind="' + kind + '" data-link="' + escAttr(link) + '">✖</button></span>';
     return html + '</div>';
 }
@@ -676,21 +729,21 @@ function renderListeners(listeners) {
     for (i = 0; i < forward.length; i++) {
         html += listenRow('forward', forward[i].source, forward[i].target);
     }
-    document.getElementById('listenForward').innerHTML = html ? html : '<div class="empty">暂无监听转发。</div>';
+    document.getElementById('listenForward').innerHTML = html ? html : '<div class="empty">暫無監聽轉發。</div>';
     html = '';
     for (i = 0; i < download.length; i++) {
         html += listenRow('download', download[i]);
     }
-    document.getElementById('listenDownload').innerHTML = html ? html : '<div class="empty">暂无监听下载。</div>';
+    document.getElementById('listenDownload').innerHTML = html ? html : '<div class="empty">暫無監聽下載。</div>';
     return forward.length + download.length;
 }
 
-/* 与页面同风格的确认弹窗(替代原生 confirm),返回 Promise<boolean>。 */
+/* 與頁面同風格的確認彈出視窗(替代原生 confirm),返回 Promise<boolean>。 */
 var confirmResolve = null;
 
 function askConfirm(text, title) {
     return new Promise(function (resolve) {
-        document.getElementById('confirmTitle').textContent = title || '确认操作';
+        document.getElementById('confirmTitle').textContent = title || '確認操作';
         document.getElementById('confirmText').textContent = text || '';
         confirmResolve = resolve;
         document.getElementById('confirmModal').hidden = false;
@@ -701,34 +754,34 @@ function closeConfirm(result) {
     document.getElementById('confirmModal').hidden = true;
     if (confirmResolve) {
         var resolve = confirmResolve;
-        confirmResolve = null;  // 先清空再回调,避免回调内再次触发时串台。
+        confirmResolve = null;  // 先清空再回調,避免回調內再次觸發時串台。
         resolve(result);
     }
 }
 
-/* 复用确认弹窗展示提示信息:只保留"确定"按钮(替代原生 alert)。 */
+/* 複用確認彈出視窗展示提示資訊:只保留"確定"按鈕(替代原生 alert)。 */
 function askAlert(text, title) {
     var card = document.querySelector('#confirmModal .modal-card');
     var ok = document.getElementById('confirmOk');
     var cancel = document.getElementById('confirmCancel');
-    card.classList.add('alert-card');  // 收窄到与登录卡片一致的比例。
-    ok.classList.remove('danger');  // 提示框不是危险操作,确定按钮不用红色悬停。
-    cancel.hidden = true;  // 提示框无需取消按钮。
+    card.classList.add('alert-card');  // 收窄到與登入卡片一致的比例。
+    ok.classList.remove('danger');  // 提示框不是危險操作,確定按鈕不用紅色懸停。
+    cancel.hidden = true;  // 提示框無需取消按鈕。
     return askConfirm(text, title).then(function (result) {
         card.classList.remove('alert-card');
-        ok.classList.add('danger');  // 恢复,不影响后续"移除监听"的确认框。
+        ok.classList.add('danger');  // 恢復,不影響後續"移除監聽"的確認框。
         cancel.hidden = false;
         return result;
     });
 }
 
-// ESC 关闭确认/提示弹窗,等同取消。
+// ESC 關閉確認/提示彈出視窗,等同取消。
 function confirmEscape(event) {
     if (event.key !== 'Escape') {
         return;
     }
     if (document.getElementById('confirmModal').hidden) {
-        return;  // 未打开时不处理,避免影响其它弹窗。
+        return;  // 未開啟時不處理,避免影響其它彈出視窗。
     }
     closeConfirm(false);
 }
@@ -745,18 +798,18 @@ function bindConfirm() {
     };
     document.getElementById('confirmModal').onclick = function (event) {
         if (event.target === this) {
-            closeConfirm(false);  // 点击遮罩空白处等同取消。
+            closeConfirm(false);  // 點擊遮罩空白處等同取消。
         }
     };
     document.addEventListener('keydown', confirmEscape);
 }
 
-/* 登录卡片:替代浏览器原生的 Basic 认证弹窗,沿用页面毛玻璃风格。 */
+/* 登入卡片:替代瀏覽器原生的 Basic 認證彈出視窗,沿用頁面毛玻璃風格。 */
 
-/* 未勾选"30天内免登录"时,令牌只存放在 sessionStorage:
-   关闭标签页即被清空,下次必须重新登录。
-   Cookie 无法做到"关闭标签页即失效"(会话Cookie要整个浏览器退出才清),
-   所以未勾选时服务端不下发Cookie,改由前端持令牌随请求带来。 */
+/* 未勾選"30天內免登入"時,令牌只存放在 sessionStorage:
+   關閉標籤頁即被清空,下次必須重新登入。
+   Cookie 無法做到"關閉標籤頁即失效"(會話Cookie要整個瀏覽器退出才清),
+   所以未勾選時伺服器端不下發Cookie,改由前端持令牌隨請求帶來。 */
 function setSessionToken(token) {
     try {
         if (token) {
@@ -765,7 +818,7 @@ function setSessionToken(token) {
             sessionStorage.removeItem('trmd_token');
         }
     } catch (e) {
-        // 隐私模式等 sessionStorage 不可用的场景直接忽略。
+        // 隱私模式等 sessionStorage 不可用的場景直接忽略。
     }
 }
 
@@ -779,13 +832,13 @@ function authHeaders() {
     return token ? {Authorization: 'Bearer ' + token} : {};
 }
 
-/* 退出登录:通知服务端轮换令牌并清除Cookie,然后回到登录卡片。 */
+/* 登出:通知伺服器端輪換令牌並清除Cookie,然後回到登入卡片。 */
 async function logout() {
     var dropdown = document.getElementById('menuDropdown');
     if (dropdown) {
-        dropdown.hidden = true;  // 先收起菜单,避免与询问框叠加。
+        dropdown.hidden = true;  // 先收起選單,避免與詢問框疊加。
     }
-    var ok = await askConfirm('退出后需要重新输入账号密码。', '退出登录');
+    var ok = await askConfirm('退出後需要重新輸入帳號密碼。', '登出');
     if (!ok) {
         return;
     }
@@ -795,15 +848,15 @@ async function logout() {
             headers: Object.assign({'Content-Type': 'application/json'}, authHeaders())
         });
     } catch (e) {
-        // 请求失败也要在本地清理,避免界面停留在已登录状态。
+        // 請求失敗也要在本機清理,避免介面停留在已登入狀態。
     }
-    setSessionToken('');  // 清掉未勾选免登录时的临时令牌。
-    openLogin();  // 重新弹出登录卡片并隐藏页面内容。
+    setSessionToken('');  // 清掉未勾選免登入時的臨時令牌。
+    openLogin();  // 重新彈出登入卡片並隱藏頁面內容。
 }
 
 function initLogout() {
     if (document.body.getAttribute('data-auth') !== '1') {
-        return;  // 未设置密码时无需退出登录入口。
+        return;  // 未設定密碼時無需登出入口。
     }
     var btn = document.getElementById('btnLogout');
     if (!btn) {
@@ -817,12 +870,12 @@ var loginShown = false;
 
 function openLogin() {
     if (loginShown) {
-        return;  // 每秒轮询都会触发,已展示时不再重复打开。
+        return;  // 每秒輪詢都會觸發,已展示時不再重複開啟。
     }
     loginShown = true;
     document.getElementById('loginPass').value = '';
     document.getElementById('loginModal').hidden = false;
-    document.body.classList.add('logged-out');  // 未登录时隐藏页面卡片,只留渐变背景。
+    document.body.classList.add('logged-out');  // 未登入時隱藏頁面卡片,只留漸變背景。
     var user = document.getElementById('loginUser');
     if (user.value) {
         document.getElementById('loginPass').focus();
@@ -834,7 +887,7 @@ function openLogin() {
 function closeLogin() {
     loginShown = false;
     document.getElementById('loginModal').hidden = true;
-    document.body.classList.remove('logged-out');  // 恢复页面内容。
+    document.body.classList.remove('logged-out');  // 恢復頁面內容。
 }
 
 async function submitLogin() {
@@ -851,22 +904,19 @@ async function submitLogin() {
         });
         var data = await res.json();
         if (!data.status) {
-            await askAlert('账号或密码不正确，请重新输入。', '登录失败');
+            await askAlert('帳號或密碼不正確，請重新輸入。', '登入失敗');
             return;
         }
-        // 勾选"30天内免登录"时服务端已下发Cookie;未勾选则把令牌留在本标签页。
+        // 勾選"30天內免登入"時伺服器端已下發Cookie;未勾選則把令牌留在本標籤頁。
         setSessionToken(remember ? '' : (data.token || ''));
-        // 清空指纹,确保登录后必定重绘一次并重建列表(否则数据未变会被跳过)。
+        // 清空指紋,確保登入後必定重繪一次並重建列表(否則資料未變會被跳過)。
         lastRenderKey = '';
         lastStructKey = null;
         lastUploadStructKey = null;
         closeLogin();
-        if (data.first_login) {
-            openSupport();  // 保持原先"首次登录展示支持作者卡片"的行为。
-        }
         refresh();
     } catch (e) {
-        await askAlert('无法连接程序,请稍后重试。', '登录失败');
+        await askAlert('無法連執行緒式,請稍後重試。', '登入失敗');
     }
 }
 
@@ -884,10 +934,10 @@ function bindLogin() {
             submitLogin();
         }
     };
-    // 每输入一个字符就推进一格渐变,复用官方"发送消息时推进"的同一套逻辑。
+    // 每輸入一個字元就推進一格漸變,複用官方"發送訊息時推進"的同一套邏輯。
     var advance = function () {
         if (!bgCtx) {
-            return;  // 渐变背景未初始化成功时跳过。
+            return;  // 漸變背景未初始化成功時跳過。
         }
         bgAdvancePosition();
     };
@@ -895,14 +945,14 @@ function bindLogin() {
     pass.addEventListener('input', advance);
 }
 
-var removingListener = {};  // 正在等待确认或移除中的监听,避免重复点击被处理多次。
+var removingListener = {};  // 正在等待確認或移除中的監聽,避免重複點擊被處理多次。
 
 async function removeListener(kind, link) {
     if (!link || removingListener[link]) {
-        return;  // 同一监听已在确认或处理中,忽略重复点击。
+        return;  // 同一監聽已在確認或處理中,忽略重複點擊。
     }
     removingListener[link] = true;
-    var ok = await askConfirm('确定移除该监听?\n' + link, '移除监听');
+    var ok = await askConfirm('確定移除該監聽?\n' + link, '移除監聽');
     if (!ok) {
         delete removingListener[link];
         return;
@@ -915,21 +965,425 @@ async function removeListener(kind, link) {
         });
         var data = await res.json();
         if (!data.status) {
-            window.alert('移除失败:' + (data.e_code || '未知错误。'));
+            window.alert('移除失敗:' + (data.e_code || '未知錯誤。'));
         }
     } catch (e) {
-        window.alert('移除失败:无法连接程序。');
+        window.alert('移除失敗:無法連執行緒式。');
     }
     delete removingListener[link];
-    refresh();  // 移除后立即刷新,无需等待下一次轮询。
+    refresh();  // 移除後立即重新整理,無需等待下一次輪詢。
+}
+
+async function adminRequest(path, payload) {
+    var response = await fetch(path, {
+        method: payload === undefined ? 'GET' : 'POST',
+        cache: 'no-store',
+        headers: Object.assign({'Content-Type': 'application/json'}, authHeaders()),
+        body: payload === undefined ? undefined : JSON.stringify(payload)
+    });
+    if (response.status === 401) {
+        openLogin();
+        throw new Error('登入已失效，請重新登入。');
+    }
+    var data = await response.json();
+    if (!response.ok || !data.status) {
+        throw new Error(data.e_code || '管理操作失敗。');
+    }
+    return data;
+}
+
+function renderService(service) {
+    if (!service || !service.status) {
+        return;
+    }
+    var badge = document.getElementById('adminServiceState');
+    badge.textContent = service.stopping ? '正在安全停止' : (service.running ? '執行中' : '尚未執行');
+    document.getElementById('adminBotState').textContent = service.bot_running ? '已連線' : '未連線';
+    document.getElementById('adminDownloadState').textContent = service.downloads_active;
+    document.getElementById('adminUploadState').textContent = service.uploads_active;
+    document.getElementById('adminBindState').textContent = service.bind_address + ':' + service.port;
+    document.getElementById('adminReconnectBot').disabled = service.stopping || !HAS_BOT;
+    document.getElementById('adminShutdown').disabled = service.stopping;
+}
+
+var adminSettingsLoaded = false;
+
+async function loadAdminSettings() {
+    try {
+        var data = await adminRequest('/api/settings');
+        var config = data.config || {};
+        var proxy = config.proxy || {};
+        document.getElementById('settingApiId').value = config.api_id || '';
+        document.getElementById('settingSessionDirectory').value = config.session_directory || '';
+        document.getElementById('settingSaveDirectory').value = config.save_directory || '';
+        document.getElementById('settingTempDirectory').value = config.temp_directory || '';
+        document.getElementById('settingDownloadTasks').value = (config.max_tasks || {}).download || 1;
+        document.getElementById('settingUploadTasks').value = (config.max_tasks || {}).upload || 1;
+        document.getElementById('settingDownloadRetries').value = (config.max_retries || {}).download || 0;
+        document.getElementById('settingUploadRetries').value = (config.max_retries || {}).upload || 0;
+        document.getElementById('settingLinks').value = config.links || '';
+        document.getElementById('settingAutoShutdown').value = String(Boolean(config.is_shutdown));
+        document.getElementById('settingProxyEnabled').value = String(Boolean(proxy.enable_proxy));
+        document.getElementById('settingProxyScheme').value = proxy.scheme || '';
+        document.getElementById('settingProxyHost').value = proxy.hostname || '';
+        document.getElementById('settingProxyPort').value = proxy.port || '';
+        document.getElementById('settingProxyUser').value = proxy.username || '';
+        document.getElementById('settingApiHashHint').textContent = data.secrets.api_hash ? '（已設定）' : '（未設定）';
+        document.getElementById('settingBotTokenHint').textContent = data.secrets.bot_token ? '（已設定）' : '（未設定）';
+        document.getElementById('settingProxyPasswordHint').textContent = data.secrets.proxy_password ? '（已設定）' : '（未設定）';
+        document.getElementById('settingApiHash').value = '';
+        document.getElementById('settingBotToken').value = '';
+        document.getElementById('settingProxyPassword').value = '';
+        var types = config.download_type || [];
+        var boxes = document.querySelectorAll('input[name="downloadType"]');
+        for (var i = 0; i < boxes.length; i++) {
+            boxes[i].checked = types.indexOf(boxes[i].value) !== -1;
+        }
+        document.getElementById('adminSettingsState').textContent = '設定已載入';
+        adminSettingsLoaded = true;
+    } catch (e) {
+        document.getElementById('adminSettingsState').textContent = '載入失敗';
+        document.getElementById('adminSettingsFeedback').textContent = e.message;
+    }
+}
+
+var adminLogAbort = null;
+var adminLogRetryTimer = 0;
+var adminLogLastEventId = 0;
+
+function prettyBytes(value) {
+    return value === null || value === undefined ? '不支援' : sizeText(value);
+}
+
+async function loadAdminControlData() {
+    try {
+        var results = await Promise.all([
+            adminRequest('/api/admin/sessions'),
+            adminRequest('/api/admin/system'),
+            adminRequest('/api/admin/queue')
+        ]);
+        var sessions = results[0];
+        var account = sessions.account || {};
+        var sessionNames = (sessions.sessions || []).map(function (item) {
+            return esc(item.name) + (item.active ? '（使用中）' : '');
+        });
+        document.getElementById('adminSessions').innerHTML =
+            '<div>帳號：' + esc(account.first_name || '未登入') +
+            (account.username ? ' (@' + esc(account.username) + ')' : '') +
+            (account.id ? ' · ID ' + esc(account.id) : '') + '</div>' +
+            '<div>連線狀態：' + (account.connected ? '已連線' : '未連線') + '</div>' +
+            '<div>Session 檔案：' + (sessionNames.length ? sessionNames.join('、') : '找不到 .session 檔案') + '</div>';
+
+        var system = results[1];
+        var disk = system.disk || {};
+        var metrics = [
+            ['作業系統', system.platform || '—'],
+            ['CPU load (1m)', system.cpu_load_1m === null ? '不支援' : Number(system.cpu_load_1m).toFixed(2)],
+            ['程序 Peak RSS', prettyBytes(system.process_peak_rss)],
+            ['系統記憶體', prettyBytes(system.system_memory_total)],
+            ['程序 Peak RSS / 系統記憶體', system.process_peak_memory_percent === null ? '不支援' : system.process_peak_memory_percent + '%'],
+            ['下載磁碟可用空間', prettyBytes(disk.free)]
+        ];
+        document.getElementById('adminResources').innerHTML = metrics.map(function (item) {
+            return '<div><span>' + esc(item[0]) + '</span><strong>' + esc(item[1]) + '</strong></div>';
+        }).join('');
+        document.getElementById('adminResourceUpdated').textContent =
+            '更新於 ' + new Date(system.timestamp * 1000).toLocaleTimeString();
+        document.getElementById('adminQueueOrder').value = (results[2].links || []).join('\n');
+    } catch (error) {
+        document.getElementById('adminResourceUpdated').textContent = '讀取失敗';
+    }
+}
+
+async function loadConfigYaml() {
+    var feedback = document.getElementById('adminYamlFeedback');
+    try {
+        var result = await adminRequest('/api/admin/config');
+        document.getElementById('adminConfigYaml').value = result.config_yaml || '';
+        feedback.textContent = '設定已載入';
+    } catch (error) {
+        feedback.textContent = '載入失敗：' + error.message;
+    }
+}
+
+async function saveConfigYaml() {
+    var feedback = document.getElementById('adminYamlFeedback');
+    feedback.textContent = '正在驗證並儲存…';
+    try {
+        var result = await adminRequest('/api/admin/config', {
+            config_yaml: document.getElementById('adminConfigYaml').value
+        });
+        feedback.textContent = result.restart_required.length ?
+            '已儲存；需重新啟動後生效：' + result.restart_required.join('、') :
+            '設定已儲存並即時套用。';
+        await loadAdminSettings();
+    } catch (error) {
+        feedback.textContent = '儲存失敗：' + error.message;
+    }
+}
+
+async function saveQueueOrder() {
+    var feedback = document.getElementById('adminQueueFeedback');
+    var links = document.getElementById('adminQueueOrder').value.split(/\r?\n/)
+        .map(function (link) { return link.trim(); }).filter(Boolean);
+    feedback.textContent = '正在套用…';
+    try {
+        await adminRequest('/api/admin/download/reorder', {links: links});
+        feedback.textContent = '佇列順序已更新';
+        await refresh(true);
+    } catch (error) {
+        feedback.textContent = '更新失敗：' + error.message;
+    }
+}
+
+function disconnectAdminLogStream() {
+    if (adminLogRetryTimer) {
+        clearTimeout(adminLogRetryTimer);
+        adminLogRetryTimer = 0;
+    }
+    if (adminLogAbort) {
+        adminLogAbort.abort();
+        adminLogAbort = null;
+    }
+    document.getElementById('adminLogState').textContent = '未連線';
+}
+
+function scheduleAdminLogReconnect(controller, state) {
+    if (controller.signal.aborted) {
+        return;
+    }
+    state.textContent = '串流中斷，重新連線中';
+    adminLogRetryTimer = setTimeout(function () {
+        if (currentSection === 'admin') {
+            connectAdminLogStream();
+        }
+    }, 2000);
+}
+
+async function connectAdminLogStream() {
+    disconnectAdminLogStream();
+    adminLogAbort = new AbortController();
+    var controller = adminLogAbort;
+    var state = document.getElementById('adminLogState');
+    var output = document.getElementById('adminLogOutput');
+    state.textContent = '連線中';
+    try {
+        var response = await fetch('/api/events', {
+            cache: 'no-store',
+            headers: Object.assign(authHeaders(), {'Last-Event-ID': String(adminLogLastEventId)}),
+            signal: controller.signal
+        });
+        if (response.status === 401) {
+            openLogin();
+            return;
+        }
+        if (!response.ok || !response.body) {
+            throw new Error('SSE 連線失敗：HTTP ' + response.status);
+        }
+        state.textContent = '即時串流中';
+        var reader = response.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer = '';
+        while (!controller.signal.aborted) {
+            var chunk = await reader.read();
+            if (chunk.done) {
+                break;
+            }
+            buffer += decoder.decode(chunk.value, {stream: true});
+            var frames = buffer.split('\n\n');
+            buffer = frames.pop() || '';
+            frames.forEach(function (frame) {
+                var lines = frame.split(/\r?\n/);
+                var eventName = 'message';
+                var data = '';
+                lines.forEach(function (line) {
+                    if (line.indexOf('id:') === 0) {
+                        adminLogLastEventId = Number(line.slice(3).trim()) || adminLogLastEventId;
+                    } else if (line.indexOf('event:') === 0) {
+                        eventName = line.slice(6).trim();
+                    } else if (line.indexOf('data:') === 0) {
+                        data += line.slice(5).trim();
+                    }
+                });
+                if (eventName === 'log' && data) {
+                    try {
+                        var item = JSON.parse(data);
+                        output.textContent += item.message + '\n';
+                        var logLines = output.textContent.split('\n');
+                        if (logLines.length > 250) {
+                            output.textContent = logLines.slice(-250).join('\n');
+                        }
+                        output.scrollTop = output.scrollHeight;
+                    } catch (error) {
+                        // Ignore malformed individual log events and keep the stream alive.
+                    }
+                }
+            });
+        }
+        scheduleAdminLogReconnect(controller, state);
+    } catch (error) {
+        if (!controller.signal.aborted) {
+            scheduleAdminLogReconnect(controller, state);
+        }
+    }
+}
+
+function selectedDownloadTypes() {
+    var boxes = document.querySelectorAll('input[name="downloadType"]:checked');
+    var values = [];
+    for (var i = 0; i < boxes.length; i++) {
+        values.push(boxes[i].value);
+    }
+    return values;
+}
+
+async function saveAdminSettings(event) {
+    event.preventDefault();
+    var settings = {
+        api_id: Number(document.getElementById('settingApiId').value),
+        api_hash: document.getElementById('settingApiHash').value,
+        bot_token: document.getElementById('settingBotToken').value,
+        session_directory: document.getElementById('settingSessionDirectory').value,
+        save_directory: document.getElementById('settingSaveDirectory').value,
+        temp_directory: document.getElementById('settingTempDirectory').value,
+        links: document.getElementById('settingLinks').value,
+        is_shutdown: document.getElementById('settingAutoShutdown').value === 'true',
+        download_type: selectedDownloadTypes(),
+        max_tasks: {
+            download: Number(document.getElementById('settingDownloadTasks').value),
+            upload: Number(document.getElementById('settingUploadTasks').value)
+        },
+        max_retries: {
+            download: Number(document.getElementById('settingDownloadRetries').value),
+            upload: Number(document.getElementById('settingUploadRetries').value)
+        },
+        proxy: {
+            enable_proxy: document.getElementById('settingProxyEnabled').value === 'true',
+            scheme: document.getElementById('settingProxyScheme').value,
+            hostname: document.getElementById('settingProxyHost').value,
+            port: document.getElementById('settingProxyPort').value ?
+                Number(document.getElementById('settingProxyPort').value) : null,
+            username: document.getElementById('settingProxyUser').value,
+            password: document.getElementById('settingProxyPassword').value
+        }
+    };
+    var feedback = document.getElementById('adminSettingsFeedback');
+    feedback.textContent = '正在儲存…';
+    try {
+        var result = await adminRequest('/api/admin/settings', {settings: settings});
+        await loadAdminSettings();
+        feedback.textContent = result.restart_required.length ?
+            '已儲存；以下設定需重新啟動後生效：' + result.restart_required.join('、') :
+            '設定已儲存並即時套用。';
+    } catch (e) {
+        feedback.textContent = '儲存失敗：' + e.message;
+    }
+}
+
+async function controlTask(kind, action, target) {
+    if (action === 'cancel' && !window.confirm('確定要取消此項工作嗎？')) {
+        return;
+    }
+    var path = kind === 'download' ? '/api/admin/download/control' : '/api/admin/upload/control';
+    var payload = kind === 'download' ?
+        {link: target.getAttribute('data-link'), message_id: target.getAttribute('data-message-id'), action: action} :
+        {task_id: target.getAttribute('data-task-id'), action: action};
+    try {
+        await adminRequest(path, payload);
+        await refresh(true);
+    } catch (e) {
+        window.alert('操作失敗：' + e.message);
+    }
+}
+
+function bindAdmin() {
+    document.getElementById('adminDownloadForm').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        var input = document.getElementById('adminDownloadLink');
+        try {
+            await adminRequest('/api/admin/download/add', {link: input.value.trim()});
+            input.value = '';
+            await refresh(true);
+        } catch (e) {
+            window.alert('加入下載失敗：' + e.message);
+        }
+    });
+    document.getElementById('adminSettingsForm').addEventListener('submit', saveAdminSettings);
+    document.getElementById('adminForwardForm').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        var submit = document.getElementById('adminForwardSubmit');
+        var feedback = document.getElementById('adminForwardFeedback');
+        submit.disabled = true;
+        feedback.textContent = '轉發工作執行中…';
+        try {
+            var result = await adminRequest('/api/admin/forward', {
+                origin_link: document.getElementById('adminForwardOrigin').value.trim(),
+                target_link: document.getElementById('adminForwardTarget').value.trim(),
+                start_id: Number(document.getElementById('adminForwardStart').value),
+                end_id: Number(document.getElementById('adminForwardEnd').value)
+            });
+            feedback.textContent = '轉發工作已加入執行佇列…';
+            var job;
+            do {
+                await new Promise(function (resolve) { setTimeout(resolve, 1000); });
+                job = await adminRequest('/api/admin/forward/status?job_id=' + encodeURIComponent(result.job_id));
+            } while (job.state === 'pending' || job.state === 'running');
+            if (job.state === 'completed') {
+                feedback.textContent = job.result.message;
+            } else {
+                feedback.textContent = '轉發失敗：' + ((job.result || {}).e_code || '未知錯誤。');
+            }
+        } catch (error) {
+            feedback.textContent = '轉發失敗：' + error.message;
+        } finally {
+            submit.disabled = false;
+        }
+    });
+    document.getElementById('adminRefreshSessions').addEventListener('click', loadAdminControlData);
+    document.getElementById('adminLoadYaml').addEventListener('click', loadConfigYaml);
+    document.getElementById('adminSaveYaml').addEventListener('click', saveConfigYaml);
+    document.getElementById('adminSaveQueueOrder').addEventListener('click', saveQueueOrder);
+    document.getElementById('page-download').addEventListener('click', function (event) {
+        var target = event.target.closest('[data-task-kind="download"]');
+        if (target) {
+            controlTask('download', target.getAttribute('data-action'), target);
+        }
+    });
+    document.getElementById('page-upload').addEventListener('click', function (event) {
+        var target = event.target.closest('[data-task-kind="upload"]');
+        if (target) {
+            controlTask('upload', target.getAttribute('data-action'), target);
+        }
+    });
+    document.getElementById('adminReconnectBot').addEventListener('click', async function () {
+        try {
+            var result = await adminRequest('/api/admin/service/reconnect', {});
+            window.alert(result.message || '機械人已重新連線。');
+            await refresh(true);
+        } catch (e) {
+            window.alert('重新連線失敗：' + e.message);
+        }
+    });
+    document.getElementById('adminShutdown').addEventListener('click', async function () {
+        if (!window.confirm('程式會等待目前的下載與上載工作完成後安全停止，確定繼續？')) {
+            return;
+        }
+        try {
+            var result = await adminRequest('/api/admin/service/shutdown', {});
+            window.alert(result.message || '已送出安全停止要求。');
+            await refresh(true);
+        } catch (e) {
+            window.alert('停止程式失敗：' + e.message);
+        }
+    });
 }
 
 function uploadDone(file) {
     return file.state === 'success' || file.state === 'sent';
 }
 
-// 无筛选时用于把活跃任务置顶的排序权重:进行中(downloading/uploading) > 队列中(pending) > 已完成/已跳过(success/sent/skip) > 失败(failure)。
-// 排序在数组副本上进行,不改动后端快照数据,且为稳定排序,同权重的任务保持原有顺序。
+// 無篩選時用於把活躍任務置頂的排序權重:進行中(downloading/uploading) > 佇列中(pending) > 已完成/已跳過(success/sent/skip) > 失敗(failure)。
+// 排序在數組副本上進行,不改動後端快照資料,且為穩定排序,同權重的任務保持原有順序。
 function stateRank(state) {
     if (state === 'downloading' || state === 'uploading') {
         return 0;
@@ -937,14 +1391,14 @@ function stateRank(state) {
     if (state === 'pending') {
         return 1;
     }
-    if (state === 'success' || state === 'sent' || state === 'skip') {
+    if (state === 'success' || state === 'sent' || state === 'skip' || state === 'cancelled') {
         return 2;
     }
-    return 3;  // failure 等失败状态置底。
+    return 3;  // failure 等失敗狀態置底。
 }
 
 function getUploadGroups(tasks) {
-    var groups = [];  // 按频道分组上传任务,保持频道首次出现的顺序。
+    var groups = [];  // 按頻道分組上載任務,保持頻道首次出現的順序。
     var index = {};
     var i;
     for (i = 0; i < tasks.length; i++) {
@@ -960,13 +1414,18 @@ function getUploadGroups(tasks) {
         group.count = group.files.length;
         group.complete = 0;
         group.failed = 0;
+        group.cancelled = 0;
         group.total_byte = 0;
         group.done_byte = 0;
         for (var j = 0; j < group.files.length; j++) {
             var file = group.files[j];
             if (file.state === 'failure') {
                 group.failed += 1;
-                continue;  // 失败文件不计入分组进度基数,避免拖低进度。
+                continue;  // 失敗檔案不計入分組進度基數,避免拖低進度。
+            }
+            if (file.state === 'cancelled') {
+                group.cancelled += 1;
+                continue;
             }
             var size = Number(file.size_byte) || 0;
             group.total_byte += size;
@@ -974,7 +1433,7 @@ function getUploadGroups(tasks) {
                 group.complete += 1;
                 group.done_byte += size;
             } else {
-                group.done_byte += Math.min(Number(file.completed) || 0, size);  // 上传中的文件按已传字节计入。
+                group.done_byte += Math.min(Number(file.completed) || 0, size);  // 上載中的檔案按已傳位元組計入。
             }
         }
         group.percent = group.total_byte ?
@@ -985,20 +1444,20 @@ function getUploadGroups(tasks) {
 }
 
 function uploadSummary(tasks) {
-    var total = 0;  // 总量只统计未失败的上传文件,失败文件退出进度基数。
+    var total = 0;  // 總量只統計未失敗的上載檔案,失敗檔案退出進度基數。
     var done = 0;
     var speed = 0;
     for (var i = 0; i < tasks.length; i++) {
         var file = tasks[i];
-        if (file.state === 'failure') {
-            continue;  // 失败文件不再计入总量与速度,避免进度被拉低。
+        if (file.state === 'failure' || file.state === 'cancelled') {
+            continue;  // 失敗檔案不再計入總量與速度,避免進度被拉低。
         }
         var size = Number(file.size_byte) || 0;
         total += size;
         if (uploadDone(file)) {
             done += size;
         } else if (file.state === 'uploading') {
-            done += Math.min(Number(file.completed) || 0, size);  // 上传中的文件按已传字节计入。
+            done += Math.min(Number(file.completed) || 0, size);  // 上載中的檔案按已傳位元組計入。
         }
         speed += Number(file.speed_value) || 0;
     }
@@ -1012,11 +1471,13 @@ function uploadSummary(tasks) {
 }
 
 function uploadCount(tasks) {
-    var count = {success: 0, failure: 0, uploading: 0, pending: 0, active: 0};
+    var count = {success: 0, failure: 0, cancelled: 0, uploading: 0, pending: 0, active: 0};
     for (var i = 0; i < tasks.length; i++) {
         var state = tasks[i].state;
         if (state === 'failure') {
             count.failure += 1;
+        } else if (state === 'cancelled') {
+            count.cancelled += 1;
         } else if (uploadDone(tasks[i])) {
             count.success += 1;
         } else {
@@ -1033,7 +1494,7 @@ function uploadCount(tasks) {
 
 function uploadRow(file) {
     var state = file.state || 'pending';
-    var text = UPLOAD_TEXT[state] || '队列中';
+    var text = UPLOAD_TEXT[state] || '佇列中';
     var cls = UPLOAD_CLASS[state] || 'status-pending';
     var progress;
     if (uploadDone(file)) {
@@ -1044,7 +1505,7 @@ function uploadRow(file) {
         progress = '<span class="cell-progress"><span class="pct' +
             (state === 'pending' ? ' pending' : '') + '">' + text + '</span></span>';
     }
-    // data-upload-id 供"上传列表结构未变时就地更新进度",避免每秒整表重建。
+    // data-upload-id 供"上載列表結構未變時就地更新進度",避免每秒整表重建。
     return '<div class="task-row member-row" data-upload-id="' +
         escAttr(file.task_id || file.path || file.file) + '">' +
         '<span class="cell-name"><span class="ficon">' + (UPLOAD_ICON[state] || '⏳') + '</span>' +
@@ -1053,18 +1514,23 @@ function uploadRow(file) {
         '<span class="cell-size">' + dash(file.size) + '</span>' +
         '<span class="cell-speed">' + dash(file.speed) + '</span>' +
         '<span class="cell-remain">' + dash(file.remaining) + '</span>' +
-        '<span class="cell-status ' + cls + '" title="' + escAttr(file.error) + '">' + text + '</span>' +
+        '<span class="cell-status ' + cls + '" title="' + escAttr(file.error) + '">' + text +
+        taskActions(state, '', '', 'upload', file.control_id, file.pause_requested, file.cancel_requested) +
+        '</span>' +
         '</div>';
 }
 
 function uploadStatusCell(group) {
     if (group.failed) {
-        return '<span class="cell-status status-failed">失败 ' + group.failed + ' 个</span>';
+        return '<span class="cell-status status-failed">失敗 ' + group.failed + ' 個</span>';
+    }
+    if (group.cancelled === group.count) {
+        return '<span class="cell-status status-skip">已取消</span>';
     }
     if (group.complete === group.count) {
         return '<span class="cell-status status-done">已完成</span>';
     }
-    return '<span class="cell-status status-running">上传中</span>';
+    return '<span class="cell-status status-running">上載中</span>';
 }
 
 function uploadBlock(group) {
@@ -1076,22 +1542,22 @@ function uploadBlock(group) {
             return matchUploadState(file, statFilter.upload);
         });
         if (files.length === 0) {
-            return '';  // 筛选后无匹配文件,不再显示该分组。
+            return '';  // 篩選後無匹配檔案,不再顯示該分組。
         }
     } else {
-        // 无筛选卡片时按状态置顶:进行中 > 队列中 > 已完成/已跳过 > 失败,使活跃任务集中显示在最上方。
+        // 無篩選卡片時按狀態置頂:進行中 > 佇列中 > 已完成/已跳過 > 失敗,使活躍任務集中顯示在最上方。
         files = files.slice().sort(function (a, b) {
             return stateRank(a.state) - stateRank(b.state);
         });
     }
-    // 筛选时强制展开,否则结果会被折叠状态藏起来。
+    // 篩選時強制展開,否則結果會被摺疊狀態藏起來。
     var isCollapsed = filtering ? false : (collapsed[key] === undefined ? lastUploadCollapsed : collapsed[key]);
     var html = '<div class="group' + (isCollapsed ? '' : ' open') + '" data-channel="' + escAttr(key) + '" data-level="1">' +
         '<div class="group-head" data-channel="' + escAttr(key) + '">' +
         '<span class="cell-name"><span class="arrow"></span>' +
         '<span class="ficon">📺</span>' +
         '<span class="gname" title="' + escAttr(group.name) + '">' + esc(group.name) + '</span>' +
-        '<span class="gcount">' + group.count + ' 个文件</span></span>' +
+        '<span class="gcount">' + group.count + ' 個檔案</span></span>' +
         progressCell(group.percent) +
         '<span class="cell-size">' + group.complete + '/' + group.count + '</span>' +
         groupStatCells(group.stat) +
@@ -1106,15 +1572,15 @@ function uploadBlock(group) {
 
 function uploadList(tasks) {
     if (tasks.length === 0) {
-        return '<div class="empty">暂无上传任务。</div>';
+        return '<div class="empty">暫無上載任務。</div>';
     }
     var html = '';
-    var groups = getUploadGroups(tasks);  // 频道 > 文件完整路径,一级可折叠。
+    var groups = getUploadGroups(tasks);  // 頻道 > 檔案完整路徑,一級可摺疊。
     for (var i = 0; i < groups.length; i++) {
         html += uploadBlock(groups[i]);
     }
     if (statFilter.upload && !html) {
-        return '<div class="empty">' + (UPLOAD_EMPTY_TEXT[statFilter.upload] || '没有符合条件的文件。') + '</div>';
+        return '<div class="empty">' + (UPLOAD_EMPTY_TEXT[statFilter.upload] || '沒有符合條件的檔案。') + '</div>';
     }
     return html;
 }
@@ -1129,7 +1595,7 @@ function syncUploadHeads() {
     var nodes = list.querySelectorAll('.group.open');
     for (var i = 0; i < nodes.length; i++) {
         if (groupVisible(nodes[i])) {
-            level = 2;  // 有任意频道展开时,最内层即为文件行。
+            level = 2;  // 有任意頻道展開時,最內層即為檔案行。
             break;
         }
     }
@@ -1140,22 +1606,22 @@ function syncUploadHeads() {
 function renderUpload(uploads) {
     var count = uploadCount(uploads);
     document.getElementById('badgeUpload').textContent = count.active;
-    /* 只有结构变化(文件增减/状态改变)才重建 DOM,否则仅就地更新进度,避免每秒整表重建。 */
+    /* 只有結構變化(檔案增減/狀態改變)才重建 DOM,否則僅就地更新進度,避免每秒整表重建。 */
     var uploadKey = uploadStructKey(uploads);
     if (uploadKey !== lastUploadStructKey) {
         lastUploadStructKey = uploadKey;
-        /* 空态以"是否存在上传文件(含已完成的)"判断,而非"是否有活跃任务"。
-           否则全部上传结束后 count.active 为 0,已完成的文件会被空态整块隐藏,
-           需新建任务才重新出现。 */
-        // 处于筛选状态时,无匹配项应提示具体的筛选条件,而非笼统的"暂无上传任务。"。
-        var uploadEmpty = '暂无上传任务。';
+        /* 空態以"是否存在上載檔案(含已完成的)"判斷,而非"是否有活躍任務"。
+           否則全部上載結束後 count.active 為 0,已完成的檔案會被空態整塊隱藏,
+           需新建任務才重新出現。 */
+        // 處於篩選狀態時,無匹配項應提示具體的篩選條件,而非籠統的"暫無上載任務。"。
+        var uploadEmpty = '暫無上載任務。';
         if (statFilter.upload) {
             uploadEmpty = UPLOAD_EMPTY_TEXT[statFilter.upload] || uploadEmpty;
         }
         document.getElementById('upload').innerHTML = uploads.length > 0 ? uploadList(uploads) : '<div class="empty">' + uploadEmpty + '</div>';
         syncToggleUpload();
         syncUploadHeads();
-        bindGroups();  // 上传列表渲染完成后统一绑定折叠事件。
+        bindGroups();  // 上載列表渲染完成後統一綁定摺疊事件。
     } else {
         updateUploadRows(uploads);
     }
@@ -1163,23 +1629,23 @@ function renderUpload(uploads) {
     lastUploadFinished = count.success + count.failure;
     renderStat('uploadStat', [
         statCell('成功', count.success, 'ok', 'success', 'upload'),
-        statCell('失败', count.failure, 'bad', 'failure', 'upload'),
-        statCell('上传中', count.uploading, '', 'uploading', 'upload'),
-        statCell('队列', count.pending, 'skip', 'pending', 'upload')
+        statCell('失敗', count.failure, 'bad', 'failure', 'upload'),
+        statCell('上載中', count.uploading, '', 'uploading', 'upload'),
+        statCell('佇列', count.pending, 'skip', 'pending', 'upload')
     ]);
     return count.active;
 }
 
-var lastRenderKey = '';  // 上次渲染的数据指纹,用于跳过无变化的重绘。
-var lastStructKey = null;  // 列表结构指纹,结构不变则不重建列表 DOM。(初始为 null 而非 '',否则空链接时 structKeyOf 返回 '' 会被误判为"未变化",导致首次渲染跳过 renderList、列表区只剩表头)
-var lastUploadStructKey = null;  // 上传列表结构指纹,同上。
+var lastRenderKey = '';  // 上次渲染的資料指紋,用於跳過無變化的重繪。
+var lastStructKey = null;  // 列表結構指紋,結構不變則不重建列表 DOM。(初始為 null 而非 '',否則空連結時 structKeyOf 返回 '' 會被誤判為"未變化",導致首次渲染跳過 renderList、列表區只剩表頭)
+var lastUploadStructKey = null;  // 上載列表結構指紋,同上。
 
-/* 轮询间隔(毫秒)。默认 1 秒。
-   若设备压力明显,调大到 2000~3000 可直接砍掉一半以上的拉取与渲染开销,
-   代价只是数字更新变慢。 */
+/* 輪詢間隔(毫秒)。預設 1 秒。
+   若設備壓力明顯,調大到 2000~3000 可直接砍掉一半以上的拉取與渲染開銷,
+   代價只是數字更新變慢。 */
 var POLL_INTERVAL_MS = 1000;
 
-/* 上传列表结构指纹:文件路径 + 状态,不含进度/速度等每秒变化的数值。 */
+/* 上載列表結構指紋:檔案路徑 + 狀態,不含進度/速度等每秒變化的數值。 */
 function uploadStructKey(uploads) {
     var parts = [];
     for (var i = 0; i < (uploads || []).length; i++) {
@@ -1188,7 +1654,7 @@ function uploadStructKey(uploads) {
     return parts.join(';');
 }
 
-/* 上传列表结构未变时,只就地更新各行的进度与速度文字,不重建 DOM。 */
+/* 上載列表結構未變時,只就地更新各行的進度與速度文字,不重建 DOM。 */
 function updateUploadRows(uploads) {
     var live = {};
     var i;
@@ -1205,8 +1671,8 @@ function updateUploadRows(uploads) {
         var percent = uploadDone(file) ? 100 : (Number(file.percent) || 0);
         var fill = row.querySelector('.fill');
         if (fill) {
-            fill.style.width = percent + '%';  // 桌面端横向条。
-            var cell = fill.closest('.cell-progress');  // 手机端圆环依赖 --p,需同步更新。
+            fill.style.width = percent + '%';  // 桌面端橫向條。
+            var cell = fill.closest('.cell-progress');  // 手機端圓環依賴 --p,需同步更新。
             if (cell) {
                 cell.style.setProperty('--p', percent + '%');
             }
@@ -1226,8 +1692,8 @@ function updateUploadRows(uploads) {
     }
 }
 
-/* 列表结构指纹:频道、链接、成员名称与状态。
-   刻意不包含进度/速度等每秒变化的数值,否则每次轮询都会触发重建。 */
+/* 列表結構指紋:頻道、連結、成員名稱與狀態。
+   刻意不包含進度/速度等每秒變化的數值,否則每次輪詢都會觸發重建。 */
 function structKeyOf(data) {
     var parts = [];
     var links = data.links || [];
@@ -1242,8 +1708,8 @@ function structKeyOf(data) {
     return parts.join(';');
 }
 
-/* 结构未变化时,只就地更新"正在下载"的行:
-   改宽度与文字,避免整表 DOM 重建(仅这几行重排)。 */
+/* 結構未變化時,只就地更新"正在下載"的行:
+   改寬度與文字,避免整表 DOM 重建(僅這幾行重排)。 */
 function updateTaskRows(data) {
     var tasks = data.tasks || [];
     var live = {};
@@ -1256,13 +1722,13 @@ function updateTaskRows(data) {
         var row = rows[i];
         var task = live[row.getAttribute('data-task-id')];
         if (!task) {
-            continue;  // 该任务已结束,等结构变化时整行替换。
+            continue;  // 該任務已結束,等結構變化時整行替換。
         }
         var fill = row.querySelector('.fill');
         if (fill) {
             var pct = task.percent + '%';
-            fill.style.width = pct;  // 桌面端横向条。
-            var cell = fill.closest('.cell-progress');  // 手机端圆环依赖 --p,需同步更新。
+            fill.style.width = pct;  // 桌面端橫向條。
+            var cell = fill.closest('.cell-progress');  // 手機端圓環依賴 --p,需同步更新。
             if (cell) {
                 cell.style.setProperty('--p', pct);
             }
@@ -1287,9 +1753,9 @@ function updateTaskRows(data) {
 }
 
 function render(data, force) {
-    /* 数据未变化时直接跳过整页重绘。
-       原本每秒都会重建整个列表 DOM,导致所有毛玻璃图层失效并重新采样背景,
-       这是 GPU 占用的主要来源。空闲(无任务变化)时可完全省掉这部分开销。 */
+    /* 資料未變化時直接跳過整頁重繪。
+       原本每秒都會重建整個列表 DOM,導致所有毛玻璃圖層失效並重新採樣背景,
+       這是 GPU 佔用的主要來源。空閒(無任務變化)時可完全省掉這部分開銷。 */
     var key = JSON.stringify(data);
     if (!force && key === lastRenderKey) {
         return;
@@ -1301,17 +1767,21 @@ function render(data, force) {
     renderOverall(data.summary, downloads, SUMMARY_IDS.download);
     renderStat('stat', [
         statCell('成功', data.count.success, 'ok', 'success', 'download'),
-        statCell('失败', data.count.failure, 'bad', 'failure', 'download'),
-        statCell('跳过', data.count.skip, 'skip', 'skip', 'download'),
-        statCell('下载中', downloads, '', 'active', 'download'),
-        statCell('队列', countQueueMembers(data.links), 'queue', 'queue', 'download')
+        statCell('失敗', data.count.failure, 'bad', 'failure', 'download'),
+        statCell('跳過', data.count.skip, 'skip', 'skip', 'download'),
+        statCell('下載中', downloads, '', 'active', 'download'),
+        statCell('佇列', countQueueMembers(data.links), 'queue', 'queue', 'download')
     ]);
     lastUploadActive = renderUpload(data.uploads || []);
     lastListenCount = renderListeners(data.listeners);
+    renderService(data.service);
+    if (!adminSettingsLoaded) {
+        loadAdminSettings();
+    }
     renderOuterLinks(data.outer_links);
     renderStatus();
-    // 只有列表结构变化(成员增减/状态改变)才重建 DOM;
-    // 否则仅就地更新正在下载的行,避免每秒整表重建带来的重排与重绘。
+    // 只有列表結構變化(成員增減/狀態改變)才重建 DOM;
+    // 否則僅就地更新正在下載的行,避免每秒整表重建帶來的重排與重繪。
     var structKey = structKeyOf(data);
     if (structKey !== lastStructKey) {
         lastStructKey = structKey;
@@ -1322,9 +1792,9 @@ function render(data, force) {
     syncBackgroundProgress(data.count.success + data.count.failure + data.count.skip + lastUploadFinished);
 }
 
-function syncBackgroundProgress(finished) {  // 下载或上传每完成一个任务,背景渐变就推进一格,与官方发送消息时推进一致。
+function syncBackgroundProgress(finished) {  // 下載或上載每完成一個任務,背景漸變就推進一格,與官方發送訊息時推進一致。
     if (bgLastProgress < 0) {
-        bgLastProgress = finished;  // 首次只记录基数,不触发移动。
+        bgLastProgress = finished;  // 首次只記錄基數,不觸發移動。
         return;
     }
     if (finished > bgLastProgress) {
@@ -1332,7 +1802,7 @@ function syncBackgroundProgress(finished) {  // 下载或上传每完成一个�
         bgAdvancePosition();
     }
     if (finished < bgLastProgress) {
-        bgLastProgress = finished;  // 任务被清空或重置时同步基数,避免数字回退后误触发。
+        bgLastProgress = finished;  // 任務被清空或重置時同步基數,避免數字回退後誤觸發。
     }
 }
 
@@ -1340,12 +1810,12 @@ async function refresh(force) {
     try {
         var res = await fetch('/api/progress', {cache: 'no-store', headers: authHeaders()});
         if (res.status === 401) {
-            openLogin();  // 未认证:前端展示登录卡片,不再触发浏览器原生弹窗。
+            openLogin();  // 未認證:前端展示登入卡片,不再觸發瀏覽器原生彈出視窗。
             return;
         }
-        document.body.classList.remove('logged-out');  // 认证通过,显示页面内容。
+        document.body.classList.remove('logged-out');  // 認證通過,顯示頁面內容。
         render(await res.json(), force);
-        refreshNameTip();  // 列表重绘后按当前鼠标位置重新定位提示。
+        refreshNameTip();  // 列表重繪後按目前滑鼠位置重新定位提示。
         document.getElementById('offline').style.display = 'none';
     } catch (e) {
         document.getElementById('offline').style.display = 'block';
@@ -1371,7 +1841,7 @@ function bindListenTabs() {
 }
 
 function bindListenRemove() {
-    var box = document.getElementById('page-listener');  // 用事件委托,避免每次轮询重新绑定。
+    var box = document.getElementById('page-listener');  // 用事件委託,避免每次輪詢重新綁定。
     box.onclick = function (event) {
         var target = event.target;
         if (!target || !target.classList || !target.classList.contains('btn-del')) {
@@ -1381,26 +1851,6 @@ function bindListenRemove() {
     };
 }
 
-function openSupport() {
-    document.getElementById('supportModal').hidden = false;
-}
-
-function closeSupport() {
-    document.getElementById('supportModal').hidden = true;
-}
-
-function supportMaskClick(event) {
-    if (event.target === this) {  // 点击遮罩空白处关闭弹窗。
-        closeSupport();
-    }
-}
-
-function supportEscape(event) {
-    if (event.key === 'Escape' && !document.getElementById('supportModal').hidden) {
-        closeSupport();
-    }
-}
-
 var OUTER_LINK_IDS = {github: 'linkGithub', subscribe_channel: 'linkChannel', video_tutorial: 'linkVideo'};
 
 function renderOuterLinks(links) {
@@ -1408,7 +1858,7 @@ function renderOuterLinks(links) {
         var node = document.getElementById(OUTER_LINK_IDS[key]);
         var url = (links || {})[key];
         node.href = url || '#';
-        node.hidden = !url;  // 后端未提供该链接时隐藏对应菜单项。
+        node.hidden = !url;  // 後端未提供該連結時隱藏對應選單項。
     });
 }
 
@@ -1417,7 +1867,7 @@ function setMenuOpen(open) {
 }
 
 function menuBtnClick(event) {
-    event.stopPropagation();  // 阻止冒泡,避免立刻被外部点击处理关闭。
+    event.stopPropagation();  // 阻止冒泡,避免立刻被外部點擊處理關閉。
     setMenuOpen(document.getElementById('menuDropdown').hidden);
 }
 
@@ -1439,30 +1889,16 @@ function bindMenu() {
     document.addEventListener('keydown', menuEscape);
 }
 
-function isFirstLogin() {
-    return document.body.getAttribute('data-first-login') === '1';  // 服务端在首次登录时写入该标记。
-}
-
-function bindSupport() {
-    document.getElementById('supportBtn').onclick = openSupport;
-    document.getElementById('supportClose').onclick = closeSupport;
-    document.getElementById('supportModal').onclick = supportMaskClick;
-    document.addEventListener('keydown', supportEscape);
-    if (isFirstLogin()) {
-        openSupport();
-    }
-}
-
-var COLS_KEY = 'trmd_cols';  // 各表列宽的本地存储键。
-var COLS_MIN = 48;  // 单列最小宽度,避免被拖到不可读。
-var colsCache = {};  // 表名 -> 非弹性列的像素宽度数组。
-var dragState = null;  // 拖拽过程中的临时状态。
+var COLS_KEY = 'trmd_cols';  // 各表列寬的本機儲存鍵。
+var COLS_MIN = 48;  // 單列最小寬度,避免被拖到不可讀。
+var colsCache = {};  // 表名 -> 非彈性列的像素寬度數組。
+var dragState = null;  // 拖拽過程中的臨時狀態。
 
 function readDefaultCols(list) {
-    var text = window.getComputedStyle(list).getPropertyValue('--cols');  // 自定义属性在隐藏元素上也可读取。
-    /* 先去掉首列的 minmax(...):否则会把它里面的最小值(如 minmax(200px, 1fr) 的 200px)
-       也当成固定列宽提取出来,导致列数凭空多一列、网格轨道与表头单元格数不匹配。
-       缩放时反复重算还会让列数不断累加,最终表头错乱。 */
+    var text = window.getComputedStyle(list).getPropertyValue('--cols');  // 自訂屬性在隱藏元素上也可讀取。
+    /* 先去掉首列的 minmax(...):否則會把它裏面的最小值(如 minmax(200px, 1fr) 的 200px)
+       也當成固定列寬提取出來,導致列數憑空多一列、網格軌道與表頭單元格數不匹配。
+       縮放時反覆重算還會讓列數不斷累加,最終表頭錯亂。 */
     text = text.replace(/minmax\([^)]*\)/g, '');
     var matches = text.match(/(\d+(?:\.\d+)?)px/g) || [];
     var widths = [];
@@ -1472,7 +1908,7 @@ function readDefaultCols(list) {
     return widths.length ? widths : [COLS_MIN];
 }
 
-var measureEl = null;  // 复用同一个隐藏元素测量文字宽度,避免频繁创建节点。
+var measureEl = null;  // 複用同一個隱藏元素測量文字寬度,避免頻繁建立節點。
 
 function measureTextWidth(text, cs) {
     if (!measureEl) {
@@ -1489,29 +1925,29 @@ function measureTextWidth(text, cs) {
     return measureEl.offsetWidth;
 }
 
-// 测量每列标题完整显示所需的宽度,作为该列不可被压缩的下限。
-// 返回数组与表头列格一一对应,首项为弹性列(频道/监听频道)的下限。
+// 測量每列標題完整顯示所需的寬度,作為該列不可被壓縮的下限。
+// 返回數組與表頭列格一一對應,首項為彈性列(頻道/監聽頻道)的下限。
 function measureColMins(list) {
     var cells = list.querySelector('.list-head').children;
     var mins = [];
     for (var i = 0; i < cells.length; i++) {
         var cs = window.getComputedStyle(cells[i]);
-        var need = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + 4;  // 内边距 + 余量,避免标题贴边。
+        var need = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + 4;  // 內邊距 + 餘量,避免標題貼邊。
         var text = cells[i].querySelector('.htext');
         if (text && text.textContent) {
             need += measureTextWidth(text.textContent, cs);
         }
-        // 单元格可通过 --col-min 声明额外下限(如进度列需保证百分比可见)。
+        // 單元格可通過 --col-min 聲明額外下限(如進度列需保證百分比可見)。
         var colMin = parseFloat(cs.getPropertyValue('--col-min')) || 0;
         mins.push(Math.max(COLS_MIN, Math.ceil(need), colMin));
     }
     return mins;
 }
 
-// 移动端弹性列(名称列)的最小宽度保底:
-// 窄屏下固定列合计已超过视口,弹性列会退回到"标题文字宽度"(约百来像素),
-// 再被嵌套缩进吃掉一部分后文件名几乎完全看不见。故移动端强制留出可读宽度,
-// 超出的部分由横向滚动承载。
+// 移動端彈性列(名稱列)的最小寬度保底:
+// 窄屏下固定列合計已超過視口,彈性列會退回到"標題文字寬度"(約百來像素),
+// 再被嵌套縮進吃掉一部分後檔案名稱幾乎完全看不見。故移動端強制留出可讀寬度,
+// 超出的部分由橫向滾動承載。
 var FLEX_MIN_MOBILE = 200;
 
 function flexColMin(measured) {
@@ -1523,7 +1959,7 @@ function flexColMin(measured) {
 }
 
 function applyCols(list, widths, flexMin) {
-    var parts = ['minmax(' + (flexMin || COLS_MIN) + 'px, 1fr)'];  // 首列弹性列不低于标题宽度,避免被其它列挤到看不见。
+    var parts = ['minmax(' + (flexMin || COLS_MIN) + 'px, 1fr)'];  // 首列彈性列不低於標題寬度,避免被其它列擠到看不見。
     for (var i = 0; i < widths.length; i++) {
         parts.push(widths[i] + 'px');
     }
@@ -1534,9 +1970,9 @@ function buildGrips(list) {
     var head = list.querySelector('.list-head');
     var cells = head.children;
     var table = list.getAttribute('data-table');
-    for (var i = 0; i < cells.length - 1; i++) {  // 末列格右侧为容器边界,不生成分隔条。
+    for (var i = 0; i < cells.length - 1; i++) {  // 末列格右側為容器邊界,不生成分隔條。
         if (cells[i].querySelector('.grip')) {
-            continue;  // 已存在分隔条时不重复创建。
+            continue;  // 已存在分隔條時不重複建立。
         }
         var grip = document.createElement('span');
         grip.className = 'grip';
@@ -1554,18 +1990,18 @@ function clampColsWidth(widths, index, value, maxFixed, mins) {
             others += widths[i];
         }
     }
-    // 下限取标题完整显示所需宽度,保证表头标题永不被压缩。
+    // 下限取標題完整顯示所需寬度,保證表頭標題永不被壓縮。
     var floor = Math.max(COLS_MIN, (mins && mins[index + 1]) || COLS_MIN);
-    // 预留首列弹性列的最小宽度,避免固定列被拉到超出可用空间后挤压首列文字。
+    // 預留首列彈性列的最小寬度,避免固定列被拉到超出可用空間後擠壓首列文字。
     var flexMin = flexColMin(mins && mins[0]);
     var max;
     if (window.innerWidth <= 760) {
-        // 移动端允许横向滚动,不把列宽限制在视口内,用户可自由拖宽,超出部分滚动查看。
+        // 移動端允許橫向滾動,不把列寬限制在視口內,用戶可自由拖寬,超出部分滾動查看。
         max = Math.max(value, 900);
     } else {
         max = Math.max(COLS_MIN, maxFixed - others - flexMin);
     }
-    // 标题优先:空间不足时保留标题所需宽度,宁可让行溢出也不压缩表头文字。
+    // 標題優先:空間不足時保留標題所需寬度,寧可讓行溢出也不壓縮表頭文字。
     return Math.max(floor, Math.min(value, max));
 }
 
@@ -1583,13 +2019,13 @@ function resizeStart(event) {
         list: list,
         table: table,
         index: index,
-        col: index,  // 每个分隔条都是其右侧固定列的左边界,统一调整该列,保证每列都有且仅有一个分隔条。
-        sign: -1,  // 向右拖动缩小该列(空间让给首列弹性列),向左拖动加宽;分隔条始终跟随光标。
+        col: index,  // 每個分隔條都是其右側固定列的左邊界,統一調整該列,保證每列都有且僅有一個分隔條。
+        sign: -1,  // 向右拖動縮小該列(空間讓給首列彈性列),向左拖動加寬;分隔條始終跟隨光標。
         origin: widths.slice(),
         widths: widths.slice(),
         startX: event.clientX,
         maxFixed: Math.max(head.clientWidth - padding - gap * widths.length, 0),
-        mins: measureColMins(list)  // 各列标题所需的最小宽度,拖拽期间保持不变。
+        mins: measureColMins(list)  // 各列標題所需的最小寬度,拖拽期間保持不變。
     };
     event.preventDefault();
     event.stopPropagation();
@@ -1615,9 +2051,9 @@ function resizeEnd() {
     }
     colsCache[dragState.table] = dragState.widths;
     try {
-        localStorage.setItem(COLS_KEY, JSON.stringify(colsCache));  // 记住本次列宽,刷新后恢复。
+        localStorage.setItem(COLS_KEY, JSON.stringify(colsCache));  // 記住本次列寬,重新整理後恢復。
     } catch (e) {
-        // 隐私模式下写入失败可忽略。
+        // 隱私模式下寫入失敗可忽略。
     }
     document.body.classList.remove('resizing');
     document.removeEventListener('pointermove', resizeMove);
@@ -1638,12 +2074,12 @@ function initCols() {
         var head = list.querySelector('.list-head');
         var widths = colsCache[table];
         if (!widths || widths.length !== head.children.length - 1) {
-            widths = readDefaultCols(list);  // 列数变化或首次加载时回退到默认列宽。
+            widths = readDefaultCols(list);  // 列數變化或首次載入時回退到預設列寬。
         }
         var mins = measureColMins(list);
         var j;
         for (j = 0; j < widths.length; j++) {
-            widths[j] = Math.max(widths[j], mins[j + 1]);  // 已保存的列宽也不得小于标题所需宽度。
+            widths[j] = Math.max(widths[j], mins[j + 1]);  // 已儲存的列寬也不得小於標題所需寬度。
         }
         colsCache[table] = widths;
         applyCols(list, widths, flexColMin(mins[0]));
@@ -1651,10 +2087,10 @@ function initCols() {
     }
 }
 
-// 跨断点(旋转屏幕、缩放窗口)时重新应用列宽,
-// 让移动端弹性列的保底最小宽度在进入/离开窄屏时正确生效或取消。
-/* 缩放、窗口尺寸变化都会改变 innerWidth(CSS 像素),
-   统一防抖重算列宽,避免高缩放比例下残留旧宽度导致表头错乱。 */
+// 跨斷點(旋轉屏幕、縮放視窗)時重新應用列寬,
+// 讓移動端彈性列的保底最小寬度在進入/離開窄屏時正確生效或取消。
+/* 縮放、視窗尺寸變化都會改變 innerWidth(CSS 像素),
+   統一防抖重算列寬,避免高縮放比例下殘留舊寬度導致表頭錯亂。 */
 var resizeTimer = null;
 window.addEventListener('resize', function () {
     clearTimeout(resizeTimer);
@@ -1666,11 +2102,11 @@ var savedListen = '';
 try {
     savedSection = localStorage.getItem(SECTION_KEY) || '';
     savedListen = localStorage.getItem(LISTEN_KEY) || '';
-    collapsed = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}') || {};  // 读回各分组折叠状态。
+    collapsed = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}') || {};  // 讀回各分組摺疊狀態。
     allCollapsed = localStorage.getItem(ALL_KEY) === '1';
     uploadAllCollapsed = localStorage.getItem(UPLOAD_ALL_KEY) === '1';
-    lastLinkCollapsed = localStorage.getItem(LINK_LAST_KEY) !== '0';  // 无记录时保持链接层默认折叠。
-    lastUploadCollapsed = localStorage.getItem(UPLOAD_LAST_KEY) === '1';  // 无记录时保持上传频道层默认展开。
+    lastLinkCollapsed = localStorage.getItem(LINK_LAST_KEY) !== '0';  // 無記錄時保持連結層預設摺疊。
+    lastUploadCollapsed = localStorage.getItem(UPLOAD_LAST_KEY) === '1';  // 無記錄時保持上載頻道層預設展開。
 } catch (e) {
     savedSection = '';
     savedListen = '';
@@ -1686,12 +2122,12 @@ function initVersion() {
     var trmd = document.getElementById('tipTrmd');
     var pyrogram = document.getElementById('tipPyrogram');
     if (trmd.textContent.indexOf('__') === 0 || pyrogram.textContent.indexOf('__') === 0) {
-        tip.hidden = true;  // 占位符未被服务端替换时隐藏,避免显示原始占位文本。
+        tip.hidden = true;  // 佔位符未被伺服器端替換時隱藏,避免顯示原始佔位文字。
     }
 }
 
-/* 统一接管原生 title 提示:任何带 title 的元素都改用自定义玻璃提示,
-   避免浏览器默认提示与自定义风格混杂(未截断的名称原本会冒出原生提示)。 */
+/* 統一接管原生 title 提示:任何帶 title 的元素都改用自訂玻璃提示,
+   避免瀏覽器預設提示與自訂風格混雜(未截斷的名稱原本會冒出原生提示)。 */
 var nameTipEl = null;
 var nameTipFor = null;
 var tipMouseX = 0;
@@ -1704,7 +2140,7 @@ function nameTipNode() {
     return nameTipEl;
 }
 
-// 取最近的、带提示文案的元素(data-tip 或 title)。
+// 取最近的、帶提示文案的元素(data-tip 或 title)。
 function nameTipTarget(node) {
     if (!node || !node.closest) {
         return null;
@@ -1712,7 +2148,7 @@ function nameTipTarget(node) {
     return node.closest('[data-tip], [title]');
 }
 
-// 原生 title 会与自定义提示同时弹出,首次遇到时迁移为 data-tip 并移除 title。
+// 原生 title 會與自訂提示同時彈出,首次遇到時遷移為 data-tip 並移除 title。
 function takeTipText(el) {
     if (el.hasAttribute('title')) {
         el.setAttribute('data-tip', el.getAttribute('title'));
@@ -1728,7 +2164,7 @@ function showNameTip(el) {
         return;
     }
     tip.textContent = text;
-    tip.classList.add('show');  // 先显示以取得实际尺寸,再据此定位。
+    tip.classList.add('show');  // 先顯示以取得實際尺寸,再據此定位。
     var rect = el.getBoundingClientRect();
     var left = rect.left;
     var top = rect.bottom + 8;
@@ -1738,7 +2174,7 @@ function showNameTip(el) {
         left = Math.max(8, window.innerWidth - width - 8);
     }
     if (top + height > window.innerHeight - 8) {
-        top = Math.max(8, rect.top - height - 8);  // 下方放不下时翻到上方。
+        top = Math.max(8, rect.top - height - 8);  // 下方放不下時翻到上方。
     }
     tip.style.left = left + 'px';
     tip.style.top = top + 'px';
@@ -1752,7 +2188,7 @@ function hideNameTip() {
     nameTipFor = null;
 }
 
-// 列表每秒重绘会销毁悬停元素,重绘后按当前鼠标位置重新定位提示。
+// 列表每秒重繪會銷燬懸停元素,重繪後按目前滑鼠位置重新定位提示。
 function refreshNameTip() {
     if (!nameTipFor || nameTipFor.isConnected) {
         return;
@@ -1772,7 +2208,7 @@ function initNameTip() {
     });
     document.addEventListener('mouseover', function (event) {
         if (document.body.classList.contains('resizing')) {
-            return;  // 拖拽列宽时不弹提示,避免干扰。
+            return;  // 拖拽列寬時不彈提示,避免干擾。
         }
         if (nameTipFor && !nameTipFor.isConnected) {
             hideNameTip();
@@ -1787,34 +2223,34 @@ function initNameTip() {
         var el = nameTipTarget(event.target);
         var to = nameTipTarget(event.relatedTarget);
         if (el && nameTipFor === el && to !== el) {
-            hideNameTip();  // 仍在同一元素内移动时不隐藏,避免闪烁。
+            hideNameTip();  // 仍在同一元素內移動時不隱藏,避免閃爍。
         }
     });
-    window.addEventListener('scroll', hideNameTip, true);  // 滚动后位置失效,直接隐藏。
+    window.addEventListener('scroll', hideNameTip, true);  // 滾動後位置失效,直接隱藏。
     document.addEventListener('pointerdown', function (event) {
         if (nameTipTarget(event.target) !== nameTipFor) {
-            hideNameTip();  // 点击提示以外的区域时关闭。
+            hideNameTip();  // 點擊提示以外的區域時關閉。
         }
     });
 }
 
 /*
- * ===== 渐变背景实现 =====
+ * ===== 漸變背景實現 =====
  * 移植自 telegram-tt(web.telegram.org/a)的 util/gradientBackground.ts;
- * 该渐变算法改编自 http://useless.altervista.org/gradient.html(原脚本作者未知)。
- * 原始代码以 GNU GPL-3.0 授权,版权归相应原作者所有。
- * 移植并修改: Gentlesprite, 2026-09
- * 修改内容: 将原 React/TS 实现改写为原生 JS,并适配本项目 DOM 结构。
+ * 該漸變算法改編自 http://useless.altervista.org/gradient.html(原腳本作者未知)。
+ * 原始代碼以 GNU GPL-3.0 授權,版權歸相應原作者所有。
+ * 移植並修改: Gentlesprite, 2026-09
+ * 修改內容: 將原 React/TS 實現改寫為原生 JS,並適配本專案 DOM 結構。
  * SPDX-License-Identifier: GPL-3.0-only
  */
-/* ===== 渐变背景,逐行移植自官方 web.telegram.org/a(telegram-tt)的 util/gradientBackground.ts =====
-   注意:官方 Web A 与 Web K(tweb)的渐变是两套实现,色点坐标、混色公式、颜色顺序都不同。 */
-var BG_GRADIENT_SIZE = 100;  // 官方 useGradientBackground 的 CANVAS_SIZE = 100,靠 CSS 拉伸获得柔和观感。
-var BG_GRADIENT_SPEED = 0.1;  // 官方 ANIMATION_SPEED:色点向目标点移动的每帧插值系数。
-var BG_GRADIENT_EPSILON = 0.01;  // 官方 POSITION_EPSILON:色点与目标的距离小于该值视为到位。
-var BG_GRADIENT_BLEND_POWER = 3;  // 官方 BLEND_POWER:按"与最近色点的距离差"加权的幂次。
-var BG_GRADIENT_STEP = 2;  // 官方 KEY_POINT_STEP:每个颜色点每次前进 2 个索引。
-var BG_GRADIENT_POINTS = [  // 官方 KEY_POINTS:8 个色点的归一化坐标。
+/* ===== 漸變背景,逐行移植自官方 web.telegram.org/a(telegram-tt)的 util/gradientBackground.ts =====
+   注意:官方 Web A 與 Web K(tweb)的漸變是兩套實現,色點座標、混色公式、顏色順序都不同。 */
+var BG_GRADIENT_SIZE = 100;  // 官方 useGradientBackground 的 CANVAS_SIZE = 100,靠 CSS 拉伸獲得柔和觀感。
+var BG_GRADIENT_SPEED = 0.1;  // 官方 ANIMATION_SPEED:色點向目標點移動的每幀插值係數。
+var BG_GRADIENT_EPSILON = 0.01;  // 官方 POSITION_EPSILON:色點與目標的距離小於該值視為到位。
+var BG_GRADIENT_BLEND_POWER = 3;  // 官方 BLEND_POWER:按"與最近色點的距離差"加權的冪次。
+var BG_GRADIENT_STEP = 2;  // 官方 KEY_POINT_STEP:每個顏色點每次前進 2 個索引。
+var BG_GRADIENT_POINTS = [  // 官方 KEY_POINTS:8 個色點的歸一化座標。
     [0.265, 0.582],
     [0.176, 0.918],
     [0.415, 0.836],
@@ -1826,34 +2262,34 @@ var BG_GRADIENT_POINTS = [  // 官方 KEY_POINTS:8 个色点的归一化坐标�
 ];
 var bgCanvas = null;
 var bgCtx = null;
-var bgHelperCanvas = null;  // 隐藏的小画布,先写入 ImageData 再拷贝到主画布,与官方两级结构一致。
+var bgHelperCanvas = null;  // 隱藏的小畫布,先寫入 ImageData 再拷貝到主畫布,與官方兩級結構一致。
 var bgHelperCtx = null;
 var bgColors = [];
 var bgKeyShift = 0;
 var bgCurrentPositions = [];
 var bgTargetPositions = [];
 var bgAnimating = false;
-var bgLastProgress = -1;  // 上一轮的已完成任务总数,-1 表示尚未记录基数。
-// 涂鸦遮罩烘焙相关:把 pattern.svg 光栅化后逐帧用 destination-in 烙进画布,取代 CSS mask-image,
-// 从而消除 Chrome 对「带遮罩的 canvas 每帧重绘」的分块闪烁(Edge 不触发此 bug)。
-var bgDoodleImg = null;     // 加载并补全尺寸的涂鸦原图。
-var bgDoodlePattern = null; // 由遮罩瓦片画布生成的重复图案,用于在设备像素空间 1:1 平铺。
-var bgDoodleLoader = null;  // 遮罩图加载器。
-var bgDoodleDpr = 0;        // 当前瓦片所用像素密度,用于判断是否需要重建。
-var bgDoodleTileW = 0;      // 遮罩瓦片宽(设备像素),对应官方 mask-size 的 26.875rem(430px)。
-var bgDoodleTileH = 0;      // 遮罩瓦片高(设备像素),按原图宽高比推算。
-var bgDoodleOffX = 0;       // 对应官方 mask-position:center 的平铺原点横向偏移(设备像素)。
-var bgDoodleOffY = 0;       // 对应官方 mask-position:center 的平铺原点纵向偏移(设备像素)。
-var BG_PATTERN_URL = 'img/pattern.svg';     // 官方涂鸦图案,与被移除的 CSS mask-image 同一文件。
-var BG_PATTERN_TILE = 430;                   // 官方 26.875rem(1rem=16px)对应的瓦片宽度(CSS px)。
-var BG_PATTERN_ASPECT = 2960 / 1440;         // 遮罩原图 viewBox 宽高比,取不到固有尺寸时兜底。
+var bgLastProgress = -1;  // 上一輪的已完成任務總數,-1 表示尚未記錄基數。
+// 塗鴉遮罩烘焙相關:把 pattern.svg 光柵化後逐幀用 destination-in 烙進畫布,取代 CSS mask-image,
+// 從而消除 Chrome 對「帶遮罩的 canvas 每幀重繪」的分塊閃爍(Edge 不觸發此 bug)。
+var bgDoodleImg = null;     // 載入並補全尺寸的塗鴉原圖。
+var bgDoodlePattern = null; // 由遮罩瓦片畫布生成的重複圖案,用於在設備像素空間 1:1 平鋪。
+var bgDoodleLoader = null;  // 遮罩圖載入器。
+var bgDoodleDpr = 0;        // 目前瓦片所用像素密度,用於判斷是否需要重建。
+var bgDoodleTileW = 0;      // 遮罩瓦片寬(設備像素),對應官方 mask-size 的 26.875rem(430px)。
+var bgDoodleTileH = 0;      // 遮罩瓦片高(設備像素),按原圖寬高比推算。
+var bgDoodleOffX = 0;       // 對應官方 mask-position:center 的平鋪原點橫向偏移(設備像素)。
+var bgDoodleOffY = 0;       // 對應官方 mask-position:center 的平鋪原點縱向偏移(設備像素)。
+var BG_PATTERN_URL = 'img/pattern.svg';     // 官方塗鴉圖案,與被移除的 CSS mask-image 同一檔案。
+var BG_PATTERN_TILE = 430;                   // 官方 26.875rem(1rem=16px)對應的瓦片寬度(CSS px)。
+var BG_PATTERN_ASPECT = 2960 / 1440;         // 遮罩原圖 viewBox 寬高比,取不到固有尺寸時兜底。
 
-function bgHexToRgb(hex) {  // 把 #rrggbb 颜色解析为 [r, g, b] 数组。
+function bgHexToRgb(hex) {  // 把 #rrggbb 顏色解析為 [r, g, b] 數組。
     var value = parseInt(hex.slice(1, 7), 16);
     return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 }
 
-function bgGetPositions(shift) {  // 官方 buildTargetPositions:取 keyPoints[(shift + i × 2) % 8] 的 4 个点。
+function bgGetPositions(shift) {  // 官方 buildTargetPositions:取 keyPoints[(shift + i × 2) % 8] 的 4 個點。
     var result = [];
     for (var i = 0; i < 4; i++) {
         var point = BG_GRADIENT_POINTS[(shift + i * BG_GRADIENT_STEP) % BG_GRADIENT_POINTS.length];
@@ -1862,17 +2298,17 @@ function bgGetPositions(shift) {  // 官方 buildTargetPositions:取 keyPoints[(
     return result;
 }
 
-var bgImageData = null;  // 复用的 ImageData:每帧新建会产生大量 GC 压力。
+var bgImageData = null;  // 複用的 ImageData:每幀新建會產生大量 GC 壓力。
 
-function bgGetGradientImageData() {  // 官方 drawStaticGradient:按与最近色点的距离差 3 次幂加权混合四色。
-    // 优化点:复用 ImageData、取消每像素的数组分配、用乘法替代 Math.pow,视觉结果完全一致。
+function bgGetGradientImageData() {  // 官方 drawStaticGradient:按與最近色點的距離差 3 次冪加權混合四色。
+    // 優化點:複用 ImageData、取消每像素的數組分配、用乘法替代 Math.pow,視覺結果完全一致。
     if (!bgImageData) {
         bgImageData = bgHelperCtx.createImageData(BG_GRADIENT_SIZE, BG_GRADIENT_SIZE);
     }
     var pixels = bgImageData.data;
     var offset = 0;
     var size = BG_GRADIENT_SIZE;
-    // 色点坐标与颜色提到循环外,避免每个像素重复读取数组。
+    // 色點座標與顏色提到循環外,避免每個像素重複讀取數組。
     var px0 = bgCurrentPositions[0][0], py0 = bgCurrentPositions[0][1];
     var px1 = bgCurrentPositions[1][0], py1 = bgCurrentPositions[1][1];
     var px2 = bgCurrentPositions[2][0], py2 = bgCurrentPositions[2][1];
@@ -1883,7 +2319,7 @@ function bgGetGradientImageData() {  // 官方 drawStaticGradient:按与最近�
     var c3r = bgColors[3][0], c3g = bgColors[3][1], c3b = bgColors[3][2];
     for (var y = 0; y < size; y++) {
         var yRatio = y / size;
-        // 行方向的差值在外层算一次,内层复用。
+        // 行方向的差值在外層算一次,內層複用。
         var ay = yRatio - py0, by = yRatio - py1, cy = yRatio - py2, dy = yRatio - py3;
         var ay2 = ay * ay, by2 = by * by, cy2 = cy * cy, dy2 = dy * dy;
         for (var x = 0; x < size; x++) {
@@ -1903,8 +2339,8 @@ function bgGetGradientImageData() {  // 官方 drawStaticGradient:按与最近�
             if (d3 < min) {
                 min = d3;
             }
-            // 权重 = (1 - (距离 - 最近距离)) 的 BG_GRADIENT_BLEND_POWER(3) 次幂;
-            // 常数 3 用连乘代替 Math.pow,速度快一个量级。
+            // 權重 = (1 - (距離 - 最近距離)) 的 BG_GRADIENT_BLEND_POWER(3) 次冪;
+            // 常數 3 用連乘代替 Math.pow,速度快一個量級。
             var k0 = 1 - (d0 - min), k1 = 1 - (d1 - min);
             var k2 = 1 - (d2 - min), k3 = 1 - (d3 - min);
             var w0 = k0 * k0 * k0, w1 = k1 * k1 * k1;
@@ -1915,7 +2351,7 @@ function bgGetGradientImageData() {  // 官方 drawStaticGradient:按与最近�
             }
             if (total === 0) {
                 total = 1;
-            }  // 避免除零(原实现会产出 NaN)。
+            }  // 避免除零(原實現會產出 NaN)。
             var n0 = w0 / total, n1 = w1 / total, n2 = w2 / total, n3 = w3 / total;
             pixels[offset++] = c0r * n0 + c1r * n1 + c2r * n2 + c3r * n3;
             pixels[offset++] = c0g * n0 + c1g * n1 + c2g * n2 + c3g * n3;
@@ -1926,7 +2362,7 @@ function bgGetGradientImageData() {  // 官方 drawStaticGradient:按与最近�
     return bgImageData;
 }
 
-function bgDrawImageData(id) {  // 先写入隐藏画布,再拉伸拷贝到设备分辨率主画布,随后用 destination-in 烘焙涂鸦。
+function bgDrawImageData(id) {  // 先寫入隱藏畫布,再拉伸拷貝到設備分辨率主畫布,隨後用 destination-in 烘焙塗鴉。
     var viewW = bgCanvas.width || BG_GRADIENT_SIZE;
     var viewH = bgCanvas.height || BG_GRADIENT_SIZE;
     bgHelperCtx.putImageData(id, 0, 0);
@@ -1936,9 +2372,9 @@ function bgDrawImageData(id) {  // 先写入隐藏画布,再拉伸拷贝到设�
     bgCtx.imageSmoothingEnabled = true;
     bgCtx.drawImage(bgHelperCanvas, 0, 0, BG_GRADIENT_SIZE, BG_GRADIENT_SIZE, 0, 0, viewW, viewH);
     if (bgDoodlePattern) {
-        /* 用 destination-in 把涂鸦烘焙进画布像素,取代 CSS mask-image:遮罩不再由浏览器合成层处理,
-           每帧只剩两次全屏绘制,Chrome 不再有逐帧重合成遮罩导致的分块闪烁。
-           图案在设备像素空间 1:1 平铺,不缩放,清晰度与矢量遮罩一致。 */
+        /* 用 destination-in 把塗鴉烘焙進畫布像素,取代 CSS mask-image:遮罩不再由瀏覽器合成層處理,
+           每幀只剩兩次全屏繪製,Chrome 不再有逐幀重合成遮罩導致的分塊閃爍。
+           圖案在設備像素空間 1:1 平鋪,不縮放,清晰度與矢量遮罩一致。 */
         bgCtx.globalCompositeOperation = 'destination-in';
         bgCtx.setTransform(1, 0, 0, 1, 0, 0);
         bgCtx.translate(bgDoodleOffX, bgDoodleOffY);
@@ -1948,25 +2384,25 @@ function bgDrawImageData(id) {  // 先写入隐藏画布,再拉伸拷贝到设�
     bgCtx.restore();
 }
 
-function bgDoodleAspect() {  // 遮罩原图宽高比:优先取固有尺寸,退化成默认 300×150 等异常时按 viewBox 兜底。
+function bgDoodleAspect() {  // 遮罩原圖寬高比:優先取固有尺寸,退化成預設 300×150 等異常時按 viewBox 兜底。
     var width = bgDoodleImg.naturalWidth;
     var height = bgDoodleImg.naturalHeight;
     if (width > 0 && height > 0) {
         var ratio = height / width;
-        if (ratio > 1.2 && ratio < 3.0) {  // 合理涂鸦宽高比区间,排除浏览器默认 300×150 退化尺寸。
+        if (ratio > 1.2 && ratio < 3.0) {  // 合理塗鴉寬高比區間,排除瀏覽器預設 300×150 退化尺寸。
             return ratio;
         }
     }
     return BG_PATTERN_ASPECT;
 }
 
-function bgBuildDoodle() {  // 把遮罩原图按当前设备像素密度光栅化为瓦片画布,再生成重复图案。
+function bgBuildDoodle() {  // 把遮罩原圖按目前設備像素密度光柵化為瓦片畫布,再生成重複圖案。
     if (!bgDoodleImg || !bgCtx) {
         return;
     }
-    var dpr = window.devicePixelRatio || 1;  // 不封顶:放大时浏览器 dpr 会升高,按真实值光栅化才 1:1 清晰。
+    var dpr = window.devicePixelRatio || 1;  // 不封頂:放大時瀏覽器 dpr 會升高,按真實值光柵化才 1:1 清晰。
     if (bgDoodlePattern && bgDoodleDpr === dpr) {
-        return;  // 像素密度未变化无需重建,避免拖动窗口时反复光栅化 SVG。
+        return;  // 像素密度未變化無需重建,避免拖動視窗時反覆光柵化 SVG。
     }
     bgDoodleDpr = dpr;
     var tileW = Math.max(1, Math.round(BG_PATTERN_TILE * dpr));
@@ -1975,31 +2411,31 @@ function bgBuildDoodle() {  // 把遮罩原图按当前设备像素密度光栅�
     tile.width = tileW;
     tile.height = tileH;
     var tileCtx = tile.getContext('2d');
-    // 瓦片宽高比与 viewBox 一致,SVG 矢量按目标尺寸清晰光栅化,不会出现发虚或留白。
+    // 瓦片寬高比與 viewBox 一致,SVG 矢量按目標尺寸清晰光柵化,不會出現發虛或留白。
     tileCtx.drawImage(bgDoodleImg, 0, 0, tileW, tileH);
     bgDoodlePattern = bgCtx.createPattern(tile, 'repeat');
 }
 
-function bgUpdateDoodleGeometry() {  // 依据瓦片宽高比与画布尺寸计算居中平铺偏移(设备像素)。
+function bgUpdateDoodleGeometry() {  // 依據瓦片寬高比與畫布尺寸計算居中平鋪偏移(設備像素)。
     if (!bgDoodleImg || !bgCanvas) {
         return;
     }
-    var dpr = window.devicePixelRatio || 1;  // 不封顶:与瓦片光栅化、画布分辨率保持一致,放大才清晰。
+    var dpr = window.devicePixelRatio || 1;  // 不封頂:與瓦片光柵化、畫布分辨率保持一致,放大才清晰。
     bgDoodleTileW = BG_PATTERN_TILE * dpr;
     bgDoodleTileH = bgDoodleTileW * bgDoodleAspect();
     bgDoodleOffX = ((bgCanvas.width - bgDoodleTileW) / 2) % bgDoodleTileW;
     bgDoodleOffY = ((bgCanvas.height - bgDoodleTileH) / 2) % bgDoodleTileH;
 }
 
-function bgResizeCanvas() {  // 按视口设备分辨率设定主画布,并同步遮罩平铺偏移与图案,随后立即重绘。
+function bgResizeCanvas() {  // 按視口設備分辨率設定主畫布,並同步遮罩平鋪偏移與圖案,隨後立即重繪。
     if (!bgCanvas || !bgCtx) {
         return;
     }
-    var dpr = window.devicePixelRatio || 1;  // 不封顶:画布按真实设备分辨率建立,放大时随 resize 重建且清晰。
+    var dpr = window.devicePixelRatio || 1;  // 不封頂:畫布按真實設備分辨率建立,放大時隨 resize 重建且清晰。
     var width = Math.max(1, Math.round((bgCanvas.clientWidth || window.innerWidth || 1) * dpr));
     var height = Math.max(1, Math.round((bgCanvas.clientHeight || window.innerHeight || 1) * dpr));
     if (bgCanvas.width !== width || bgCanvas.height !== height) {
-        bgCanvas.width = width;  // 重设宽高会清空画布并重置状态,需重建变换。
+        bgCanvas.width = width;  // 重設寬高會清空畫布並重置狀態,需重建變換。
         bgCanvas.height = height;
     }
     bgUpdateDoodleGeometry();
@@ -2007,7 +2443,7 @@ function bgResizeCanvas() {  // 按视口设备分辨率设定主画布,并同�
     bgDrawImageData(bgGetGradientImageData());
 }
 
-function bgEnsureSvgSize(text) {  // 给无固有尺寸的 SVG 补上与 viewBox 一致的 width/height,避免被缩放模糊。
+function bgEnsureSvgSize(text) {  // 給無固有尺寸的 SVG 補上與 viewBox 一致的 width/height,避免被縮放模糊。
     return text.replace(/<svg([^>]*)>/i, function (match, attrs) {
         if (/\bwidth\s*=/.test(attrs) && /\bheight\s*=/.test(attrs)) {
             return match;
@@ -2020,7 +2456,7 @@ function bgEnsureSvgSize(text) {  // 给无固有尺寸的 SVG 补上与 viewBox
     });
 }
 
-function bgLoadDoodle() {  // 异步加载涂鸦遮罩,就绪后烘焙进画布并显示背景,失败则退化为纯渐变。
+function bgLoadDoodle() {  // 異步載入塗鴉遮罩,就緒後烘焙進畫布並顯示背景,失敗則退化為純漸變。
     bgDoodleLoader = new Image();
     bgDoodleLoader.onload = function () {
         bgDoodleImg = bgDoodleLoader;
@@ -2032,11 +2468,11 @@ function bgLoadDoodle() {  // 异步加载涂鸦遮罩,就绪后烘焙进画布�
             URL.revokeObjectURL(bgDoodleLoader.src);
         }
     };
-    bgDoodleLoader.onerror = function () {  // 遮罩加载失败:退化为无涂鸦的纯渐变背景,至少不再闪。
+    bgDoodleLoader.onerror = function () {  // 遮罩載入失敗:退化為無塗鴉的純漸變背景,至少不再閃。
         bgCanvas.classList.add('on');
     };
-    // 直接加载无固有尺寸的 SVG 会让浏览器退化成 300×150 再放大,导致涂鸦模糊;
-    // 故先取文本、补上与 viewBox 一致的 width/height 再生成 Blob URL,确保按目标尺寸清晰光栅化。
+    // 直接載入無固有尺寸的 SVG 會讓瀏覽器退化成 300×150 再放大,導致塗鴉模糊;
+    // 故先取文字、補上與 viewBox 一致的 width/height 再生成 Blob URL,確保按目標尺寸清晰光柵化。
     if (typeof fetch === 'function') {
         fetch(BG_PATTERN_URL).then(function (response) {
             return response.text();
@@ -2044,14 +2480,14 @@ function bgLoadDoodle() {  // 异步加载涂鸦遮罩,就绪后烘焙进画布�
             var blob = new Blob([bgEnsureSvgSize(text)], {type: 'image/svg+xml'});
             bgDoodleLoader.src = URL.createObjectURL(blob);
         }).catch(function () {
-            bgDoodleLoader.src = BG_PATTERN_URL;  // 取文本失败则退回直接加载(可能发虚,仅兜底)。
+            bgDoodleLoader.src = BG_PATTERN_URL;  // 取文字失敗則退回直接載入(可能發虛,僅兜底)。
         });
     } else {
         bgDoodleLoader.src = BG_PATTERN_URL;
     }
 }
 
-function bgStepPositions() {  // 官方 stepPositions:色点向目标点做 0.1 线性插值,到位后停止。
+function bgStepPositions() {  // 官方 stepPositions:色點向目標點做 0.1 線性插值,到位後停止。
     var moving = false;
     for (var i = 0; i < 4; i++) {
         var current = bgCurrentPositions[i];
@@ -2066,7 +2502,7 @@ function bgStepPositions() {  // 官方 stepPositions:色点向目标点做 0.1 
     return moving;
 }
 
-function bgAnimate() {  // 官方 animate:仅在色点移动期间逐帧重绘,静止后自动停止,开销几乎为零。
+function bgAnimate() {  // 官方 animate:僅在色點移動期間逐幀重繪,靜止後自動停止,開銷幾乎為零。
     var moving = bgStepPositions();
     bgDrawImageData(bgGetGradientImageData());
     if (moving) {
@@ -2076,7 +2512,7 @@ function bgAnimate() {  // 官方 animate:仅在色点移动期间逐帧重绘,�
     }
 }
 
-function bgAdvancePosition() {  // 官方 advancePosition:推进到下一个目标位并启动补间;官方在发送消息时调用。
+function bgAdvancePosition() {  // 官方 advancePosition:推進到下一個目標位並啟動補間;官方在發送訊息時調用。
     bgTargetPositions = bgGetPositions(bgKeyShift);
     bgKeyShift = (bgKeyShift + 1) % BG_GRADIENT_POINTS.length;
     if (!bgAnimating) {
@@ -2104,15 +2540,15 @@ function initBackgroundGradient() {
     if (!bgColors.length) {
         return;
     }
-    // 官方初始布点为 keyPoints[0,2,4,6],首个目标与当前位置相同,因此加载后与官方静止状态一致。
+    // 官方初始布點為 keyPoints[0,2,4,6],首個目標與目前位置相同,因此載入後與官方靜止狀態一致。
     bgCurrentPositions = bgGetPositions(0);
     bgTargetPositions = bgGetPositions(0);
     bgKeyShift = 1;
-    // 启用 alpha:涂鸦以外区域透明,露出页面底色,观感与原 CSS mask 一致。
+    // 啟用 alpha:塗鴉以外區域透明,露出頁面底色,觀感與原 CSS mask 一致。
     bgCtx = bgCanvas.getContext('2d', {alpha: true});
-    bgResizeCanvas();  // 按设备分辨率建立主画布并完成首次绘制(此时尚无涂鸦,仅渐变)。
+    bgResizeCanvas();  // 按設備分辨率建立主畫布並完成首次繪製(此時尚無塗鴉,僅漸變)。
     window.addEventListener('resize', bgResizeCanvas);
-    bgLoadDoodle();  // 遮罩就绪后再添加 on 类显示背景,避免未遮罩的全屏渐变闪现。
+    bgLoadDoodle();  // 遮罩就緒後再添加 on 類顯示背景,避免未遮罩的全屏漸變閃現。
 }
 
 bindSections();
@@ -2122,21 +2558,21 @@ bindConfirm();
 bindLogin();
 initLogout();
 bindStatFilter();
-bindSupport();
 bindMenu();
 initVersion();
-applyBotVisibility();  // 未配置机器人时隐藏整个侧边栏,随后switchSection会强制锁定到下载页。
+applyBotVisibility();  // 未設定機械人時隱藏整個側邊欄,隨後switchSection會強制鎖定到下載頁。
 switchSection(savedSection);
 switchListen(savedListen);
 document.getElementById('toggleAll').onclick = toggleAll;
 document.getElementById('toggleUpload').onclick = toggleUploadAll;
-initCols();  // 恢复上次的列宽并生成拖拽分隔条。
-initNameTip();  // 悬停文件名时显示完整名称。
-initBackgroundGradient();  // 启动 Telegram 风格的动画渐变背景。
+bindAdmin();
+initCols();  // 恢復上次的列寬並生成拖拽分隔條。
+initNameTip();  // 懸停檔案名稱時顯示完整名稱。
+initBackgroundGradient();  // 啟動 Telegram 風格的動畫漸變背景。
 
-/* 页面不可见(切到后台标签/最小化)时暂停轮询。
-   后台标签不会被合成显示,继续每秒拉取数据、比对指纹、重建 DOM 只是白白吃 CPU;
-   回到前台时立即补一次刷新,观感完全不受影响。 */
+/* 頁面不可見(切到後台標籤/最小化)時暫停輪詢。
+   後台標籤不會被合成顯示,繼續每秒拉取資料、比對指紋、重建 DOM 只是白白吃 CPU;
+   回到前台時立即補一次重新整理,觀感完全不受影響。 */
 var pollTimer = 0;
 
 function startPolling() {
@@ -2156,10 +2592,10 @@ document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
         stopPolling();
     } else {
-        refresh();  // 回到前台先补一次,避免看到后台期间滞留的旧数据。
+        refresh();  // 回到前台先補一次,避免看到後台期間滯留的舊資料。
         startPolling();
     }
 });
 
-refresh(true);  // 首屏强制按最新数据渲染,跳过去重,确保进度条开局即正确显示。
+refresh(true);  // 首屏強制按最新資料渲染,跳過去重,確保進度列開局即正確顯示。
 startPolling();
