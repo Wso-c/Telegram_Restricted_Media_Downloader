@@ -1,0 +1,1581 @@
+# coding=UTF-8
+# Author:Gentlesprite
+# Software:PyCharm
+# Time:2024/7/2 0:59
+# File:enums.py
+import os
+import re
+import sys
+import time
+import ipaddress
+import platform
+
+from functools import wraps
+from dataclasses import dataclass
+from typing import (
+    Any,
+    Union,
+    Optional,
+    Callable
+)
+
+from module import (
+    log,
+    console
+)
+from module.language import _t
+
+
+class LinkType:
+    SINGLE: str = 'single'
+    GROUP: str = 'group'
+    COMMENT: str = 'comment'
+    TOPIC: str = 'topic'
+
+
+@dataclass
+class Link:
+    # https://github.com/tangyoha/telegram_media_downloader/blob/master/utils/format.py#L14
+    group_id: Union[str, int, None] = None
+    post_id: Optional[int] = None
+    comment_id: Optional[int] = None
+    topic_id: Optional[int] = None
+
+
+class DownloadType:
+    VIDEO: str = 'video'
+    PHOTO: str = 'photo'
+    DOCUMENT: str = 'document'
+    AUDIO: str = 'audio'
+    VOICE: str = 'voice'
+    ANIMATION: str = 'animation'
+    VIDEO_NOTE: str = 'video_note'
+    LIVE_PHOTO: str = 'live_photo'
+
+    def __iter__(self):
+        for key, value in vars(self.__class__).items():
+            if not key.startswith('_') and not callable(value):  # 排除特殊方法和屬性。
+                yield value
+
+
+class DownloadStatus:
+    PENDING = 'pending'
+    DOWNLOADING = 'downloading'
+    PAUSED = 'paused'
+    CANCELLED = 'cancelled'
+    SUCCESS = 'success'
+    FAILURE = 'failure'
+    SKIP = 'skip'
+    RETRY = 'retry'
+
+
+class UploadStatus:
+    PENDING = 'pending'
+    UPLOADING = 'uploading'
+    PAUSED = 'paused'
+    CANCELLED = 'cancelled'
+    SUCCESS = 'success'
+    FAILURE = 'failure'
+    SENT = 'sent'
+
+
+class CalenderKeyboard:
+    START_TIME_BUTTON: str = 'start time button'
+    END_TIME_BUTTON: str = 'end time button'
+
+
+class SaveDirectoryPrefix:
+    CHAT_ID: str = '%CHAT_ID%'
+    CHAT_NAME: str = '%CHAT_NAME%'
+    MIME_TYPE: str = '%MIME_TYPE%'
+
+    def __iter__(self):
+        for key, value in vars(self.__class__).items():
+            if not key.startswith('_') and not callable(value):  # 排除特殊方法和屬性。
+                yield value
+
+
+class WebMeta:
+    IP: str = 'IP'
+    PORT: str = 'port'
+    USERNAME: str = 'username'
+    PASSWORD: str = 'password'
+    COOKIE_NAME: str = 'TRMD_WEB_SESSION'
+    DEFAULT_PORT: int = 2921
+
+
+class KeyWord:
+    LINK: str = 'link'
+    LINK_TYPE: str = 'link type'
+    SIZE: str = 'size'
+    STATUS: str = 'status'
+    FILE: str = 'file'
+    ERROR_SIZE: str = 'error size'
+    ACTUAL_SIZE: str = 'actual size'
+    ALREADY_EXIST: str = 'already exist'
+    CHANNEL: str = 'channel'
+    MESSAGE_ID: str = 'message id'
+    TYPE: str = 'type'
+    RE_DOWNLOAD: str = 're-download'
+    RE_UPLOAD: str = 're-upload'
+    RETRY_TIMES: str = 'retry times'
+    CURRENT_DOWNLOAD_TASK: str = 'current download task'
+    CURRENT_UPLOAD_TASK: str = 'current upload task'
+    REASON: str = 'reason'
+    RESUME: str = 'resume'
+    DOWNLOAD_TASK: str = 'download task'
+    UPLOAD_TASK: str = 'upload task'
+    DOWNLOAD_AND_UPLOAD_TASK: str = 'download and upload task'
+    FORWARD_SUCCESS: str = 'forward success'
+    FORWARD_FAILURE: str = 'forward failure'
+    FORWARD_SKIP: str = 'skip forward'
+    UPLOAD_FILE_PART: str = 'upload file part'
+
+
+class Extension:
+    PHOTO = {
+        'image/avif': 'avif',
+        'image/bmp': 'bmp',
+        'image/gif': 'gif',
+        'image/ief': 'ief',
+        'image/jpg': 'jpg',
+        'image/jpeg': 'jpeg',
+        'image/heic': 'heic',
+        'image/heif': 'heif',
+        'image/png': 'png',
+        'image/svg+xml': 'svg',
+        'image/tiff': 'tif',
+        'image/vnd.microsoft.icon': 'ico',
+        'image/x-cmu-raster': 'ras',
+        'image/x-portable-anymap': 'pnm',
+        'image/x-portable-bitmap': 'pbm',
+        'image/x-portable-graymap': 'pgm',
+        'image/x-portable-pixmap': 'ppm',
+        'image/x-rgb': 'rgb',
+        'image/x-xbitmap': 'xbm',
+        'image/x-xpixmap': 'xpm',
+        'image/x-xwindowdump': 'xwd'
+    }
+    VIDEO = {
+        'video/mp4': 'mp4',
+        'video/mpeg': 'mpg',
+        'video/quicktime': 'qt',
+        'video/webm': 'webm',
+        'video/x-msvideo': 'avi',
+        'video/x-sgi-movie': 'movie',
+        'video/x-matroska': 'mkv'
+    }
+    REVERSE_PHOTO = {
+        'avif': 'image/avif',
+        'bmp': 'image/bmp',
+        'gif': 'image/gif',
+        'ief': 'image/ief',
+        'jpg': 'image/jpg',
+        'jpeg': 'image/jpeg',
+        'heic': 'image/heic',
+        'heif': 'image/heif',
+        'png': 'image/png',
+        'svg': 'image/svg+xml',
+        'tif': 'image/tiff',
+        'ico': 'image/vnd.microsoft.icon',
+        'ras': 'image/x-cmu-raster',
+        'pnm': 'image/x-portable-anymap',
+        'pbm': 'image/x-portable-bitmap',
+        'pgm': 'image/x-portable-graymap',
+        'ppm': 'image/x-portable-pixmap',
+        'rgb': 'image/x-rgb',
+        'xbm': 'image/x-xbitmap',
+        'xpm': 'image/x-xpixmap',
+        'xwd': 'image/x-xwindowdump'
+    }
+    REVERSE_VIDEO = {
+        'mp4': 'video/mp4',
+        'mpg': 'video/mpeg',
+        'qt': 'video/quicktime',
+        'webm': 'video/webm',
+        'avi': 'video/x-msvideo',
+        'movie': 'video/x-sgi-movie',
+        'mkv': 'video/x-matroska'
+    }
+    ALL_REVERSE = {
+        'avif': 'image/avif',
+        'bmp': 'image/bmp',
+        'gif': 'image/gif',
+        'ief': 'image/ief',
+        'jpg': 'image/jpg',
+        'jpeg': 'image/jpeg',
+        'heic': 'image/heic',
+        'heif': 'image/heif',
+        'png': 'image/png',
+        'svg': 'image/svg+xml',
+        'tif': 'image/tiff',
+        'ico': 'image/vnd.microsoft.icon',
+        'ras': 'image/x-cmu-raster',
+        'pnm': 'image/x-portable-anymap',
+        'pbm': 'image/x-portable-bitmap',
+        'pgm': 'image/x-portable-graymap',
+        'ppm': 'image/x-portable-pixmap',
+        'rgb': 'image/x-rgb',
+        'xbm': 'image/x-xbitmap',
+        'xpm': 'image/x-xpixmap',
+        'xwd': 'image/x-xwindowdump',
+        'video/mp4': 'mp4',
+        'video/mpeg': 'mpg',
+        'video/quicktime': 'qt',
+        'video/webm': 'webm',
+        'video/x-msvideo': 'avi',
+        'video/x-sgi-movie': 'movie',
+        'video/x-matroska': 'mkv'
+    }
+
+
+class GradientColor:
+    # 生成漸變色:https://photokit.com/colors/color-gradient/?lang=zh
+    BLUE2PURPLE_14 = [
+        '#0ebeff',
+        '#21b4f9',
+        '#33abf3',
+        '#46a1ed',
+        '#5898e8',
+        '#6b8ee2',
+        '#7d85dc',
+        '#907bd6',
+        '#a272d0',
+        '#b568ca',
+        '#c75fc5',
+        '#da55bf',
+        '#ec4cb9',
+        '#ff42b3'
+    ]
+    GREEN2PINK_11 = [
+        '#00ff40',
+        '#14f54c',
+        '#29eb58',
+        '#3de064',
+        '#52d670',
+        '#66cc7c',
+        '#7ac288',
+        '#8fb894',
+        '#a3ada0',
+        '#b8a3ac',
+        '#cc99b8'
+    ]
+    GREEN2BLUE_10 = [
+        '#84fab0',
+        '#85f6b8',
+        '#86f1bf',
+        '#88edc7',
+        '#89e9ce',
+        '#8ae4d6',
+        '#8be0dd',
+        '#8ddce5',
+        '#8ed7ec',
+        '#8fd3f4'
+    ]
+    YELLOW2GREEN_10 = [
+        '#d4fc79',
+        '#cdfa7d',
+        '#c6f782',
+        '#bff586',
+        '#b8f28b',
+        '#b2f08f',
+        '#abed94',
+        '#a4eb98',
+        '#9de89d',
+        '#96e6a1'
+    ]
+    ORANGE2YELLOW_15 = [
+        '#f08a5d',
+        '#f1915e',
+        '#f1985f',
+        '#f29f60',
+        '#f3a660',
+        '#f3ad61',
+        '#f4b462',
+        '#f5bc63',
+        '#f5c364',
+        '#f6ca65',
+        '#f6d166',
+        '#f7d866',
+        '#f8df67',
+        '#f8e668',
+        '#f9ed69'
+    ]
+    NEW_LIFE = [
+        '#43e97b',
+        '#42eb85',
+        '#41ed8f',
+        '#3fee9a',
+        '#3ef0a4',
+        '#3df2ae',
+        '#3cf4b8',
+        '#3af5c3',
+        '#39f7cd',
+        '#38f9d7'
+    ]
+    RED_GRADIENT_15 = [
+        '#ff0000',
+        '#ff0011',
+        '#ff0021',
+        '#ff0032',
+        '#ff0043',
+        '#ff0053',
+        '#ff0064',
+        '#ff0075',
+        '#ff0085',
+        '#ff0096',
+        '#ff1a9e',
+        '#ff33a6',
+        '#ff4db0',
+        '#ff66b8',
+        '#ff80c2'
+    ]
+
+    @staticmethod
+    def __extend_gradient_colors(colors: list, target_length: int) -> list:
+        extended_colors = colors[:]
+        while len(extended_colors) < target_length:
+            # 添加原列表（除最後一個元素外）的逆序
+            extended_colors.extend(colors[-2::-1])
+            # 如果仍然不夠長，繼續添加正序部分
+            if len(extended_colors) < target_length:
+                extended_colors.extend(colors[:-1])
+        return extended_colors[:target_length]
+
+    @staticmethod
+    def gen_gradient_text(text: str, gradient_color: list) -> str:
+        """當漸變色列表小於文字長度時,翻轉並擴展目前列表。"""
+        text_lst: list = [i for i in text]
+        text_lst_len: int = len(text_lst)
+        gradient_color_len: int = len(gradient_color)
+        if text_lst_len > gradient_color_len:
+            # 擴展顏色列表以適應文字長度
+            gradient_color = GradientColor.__extend_gradient_colors(gradient_color, text_lst_len)
+        result: str = ''
+        for i in range(text_lst_len):
+            result += f'[{gradient_color[i]}]{text_lst[i]}[/{gradient_color[i]}]'
+        return result
+
+    @staticmethod
+    def __hex_to_rgb(hex_color: str) -> tuple:
+        """將十六進制顏色值轉換為RGB元組。"""
+        hex_color = hex_color.lstrip('#')
+        return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+
+    @staticmethod
+    def __rgb_to_hex(r: int, g: int, b: int) -> str:
+        """將RGB元組轉換為十六進制顏色值。"""
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    @staticmethod
+    def generate_gradient(start_color: str, end_color: str, steps: int) -> list:
+        """根據起始和結束顏色生成顏色漸變列表。"""
+        steps = 2 if steps <= 1 else steps
+        # 轉換起始和結束顏色為RGB
+        start_rgb = GradientColor.__hex_to_rgb(start_color)
+        end_rgb = GradientColor.__hex_to_rgb(end_color)
+        # 生成漸變色列表
+        gradient_color: list = []
+        for i in range(steps):
+            r = int(start_rgb[0] + (end_rgb[0] - start_rgb[0]) * i / (steps - 1))
+            g = int(start_rgb[1] + (end_rgb[1] - start_rgb[1]) * i / (steps - 1))
+            b = int(start_rgb[2] + (end_rgb[2] - start_rgb[2]) * i / (steps - 1))
+            gradient_color.append(GradientColor.__rgb_to_hex(r, g, b))
+
+        return gradient_color
+
+
+class Banner:
+    A = r'''
+       ______           __  __                     _ __          
+      / ____/__  ____  / /_/ /__  _________  _____(_) /____      
+     / / __/ _ \/ __ \/ __/ / _ \/ ___/ __ \/ ___/ / __/ _ \     
+    / /_/ /  __/ / / / /_/ /  __(__  ) /_/ / /  / / /_/  __/     
+    \____/\___/_/ /_/\__/_/\___/____/ .___/_/  /_/\__/\___/      
+                                   /_/                           
+        '''
+    B = r'''
+    ╔═╗┌─┐┌┐┌┌┬┐┬  ┌─┐┌─┐┌─┐┬─┐┬┌┬┐┌─┐  
+    ║ ╦├┤ │││ │ │  ├┤ └─┐├─┘├┬┘│ │ ├┤   
+    ╚═╝└─┘┘└┘ ┴ ┴─┘└─┘└─┘┴  ┴└─┴ ┴ └─┘  
+        '''
+    C = r'''
+     ██████╗ ███████╗███╗   ██╗████████╗██╗     ███████╗███████╗██████╗ ██████╗ ██╗████████╗███████╗    
+    ██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝██║     ██╔════╝██╔════╝██╔══██╗██╔══██╗██║╚══██╔══╝██╔════╝    
+    ██║  ███╗█████╗  ██╔██╗ ██║   ██║   ██║     █████╗  ███████╗██████╔╝██████╔╝██║   ██║   █████╗      
+    ██║   ██║██╔══╝  ██║╚██╗██║   ██║   ██║     ██╔══╝  ╚════██║██╔═══╝ ██╔══██╗██║   ██║   ██╔══╝      
+    ╚██████╔╝███████╗██║ ╚████║   ██║   ███████╗███████╗███████║██║     ██║  ██║██║   ██║   ███████╗    
+     ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚══════╝╚══════╝╚═╝     ╚═╝  ╚═╝╚═╝   ╚═╝   ╚══════╝           
+            '''
+    D = r'''                                                                          
+                                            ,,                                       ,,                    
+      .g8"""bgd                      mm   `7MM                                       db   mm               
+    .dP'     `M                      MM     MM                                            MM               
+    dM'       `   .gP"Ya `7MMpMMMb.mmMMmm   MM  .gP"Ya  ,pP"Ybd `7MMpdMAo.`7Mb,od8 `7MM mmMMmm .gP"Ya      
+    MM           ,M'   Yb  MM    MM  MM     MM ,M'   Yb 8I   `"   MM   `Wb  MM' "'   MM   MM  ,M'   Yb     
+    MM.    `7MMF'8M""""""  MM    MM  MM     MM 8M"""""" `YMMMa.   MM    M8  MM       MM   MM  8M""""""     
+    `Mb.     MM  YM.    ,  MM    MM  MM     MM YM.    , L.   I8   MM   ,AP  MM       MM   MM  YM.    ,     
+      `"bmmmdPY   `Mbmmd'.JMML  JMML.`Mbmo.JMML.`Mbmmd' M9mmmP'   MMbmmd' .JMML.   .JMML. `Mbmo`Mbmmd'     
+                                                                  MM                                       
+                                                                .JMML.                                     
+        '''
+    TRMD = r'''
+    ████████╗██████╗ ███╗   ███╗██████╗ 
+    ╚══██╔══╝██╔══██╗████╗ ████║██╔══██╗
+       ██║   ██████╔╝██╔████╔██║██║  ██║
+       ██║   ██╔══██╗██║╚██╔╝██║██║  ██║
+       ██║   ██║  ██║██║ ╚═╝ ██║██████╔╝
+       ╚═╝   ╚═╝  ╚═╝╚═╝     ╚═╝╚═════╝
+    '''
+
+
+class Validator:
+
+    @staticmethod
+    def is_contain_chinese(text: str) -> bool:
+        for ch in text:
+            if u'\u4e00' <= ch <= u'\u9fff':
+                log.warning('如果無法正常下載,請嘗試不使用中文路徑後重試。')
+                return True
+        return False
+
+    @staticmethod
+    def is_valid_api_id(api_id: str, valid_length: int = 32) -> bool:
+        try:
+            if len(api_id) < valid_length:
+                if api_id.isdigit():
+                    return True
+                else:
+                    log.warning(f'意外的參數:"{api_id}",不是「純數字」請重新輸入!')
+                    return False
+            else:
+                log.warning(f'意外的參數,填寫的"{api_id}"可能是「api_hash」,請填入正確的「api_id」!')
+                return False
+        except (AttributeError, TypeError):
+            log.error('手動編輯config.yaml時,api_id需要有引號!')
+            return False
+
+    @staticmethod
+    def is_valid_api_hash(api_hash: str, valid_length: int = 32) -> bool:
+        return len(str(api_hash)) == valid_length
+
+    @staticmethod
+    def is_valid_bot_token(bot_token: str, valid_format: str = ':') -> bool:
+        if valid_format in bot_token:
+            p = bot_token.split(valid_format)
+            if len(p) == 2 and all(p):
+                return True
+        return False
+
+    @staticmethod
+    def is_valid_links_file(file_path: str, valid_format: str = '.txt') -> bool:
+        file_path = os.path.normpath(file_path)
+        return os.path.isfile(file_path) and file_path.endswith(valid_format)
+
+    @staticmethod
+    def is_valid_save_directory(save_directory: str) -> bool:
+        for placeholder in SaveDirectoryPrefix():
+            if placeholder in save_directory:
+                save_directory = save_directory.replace(placeholder, '')
+        save_directory = os.path.normpath(save_directory)
+        if not os.path.exists(save_directory):
+            while True:
+                try:
+                    question = console.input(f'目錄:"{save_directory}"不存在,是否建立? - 「y|n」(預設y):').strip().lower()
+                    if question in ('y', ''):
+                        os.makedirs(save_directory, exist_ok=True)
+                        console.log(f'成功建立目錄:"{save_directory}"')
+                        break
+                    elif question == 'n':
+                        break
+                    else:
+                        log.warning(f'意外的參數:"{question}",支援的參數 - 「y|n」')
+                except Exception as e:
+                    log.error(f'意外的錯誤,原因:"{e}"')
+                    break
+        return os.path.isdir(save_directory)
+
+    @staticmethod
+    def is_valid_number(max_tasks: int) -> bool:
+        try:
+            return int(max_tasks) > 0
+        except ValueError:
+            return False
+        except Exception as e:
+            log.error(f'意外的錯誤,原因:"{e}"')
+            return False
+
+    @staticmethod
+    def is_valid_enable_proxy(enable_proxy: Union[str, bool]) -> bool:
+        if enable_proxy in ('y', 'n'):
+            return True
+        return False
+
+    @staticmethod
+    def is_valid_scheme(scheme: str, valid_format: list) -> bool:
+        return scheme in valid_format
+
+    @staticmethod
+    def is_valid_hostname(hostname: str) -> bool:
+        return isinstance(ipaddress.ip_address(hostname), ipaddress.IPv4Address)
+
+    @staticmethod
+    def is_valid_port(port: int) -> bool:
+        try:
+            return 0 < int(port) <= 65535
+        except ValueError:  # 處理非整數字串的情況
+            return False
+        except TypeError:  # 處理傳入非數字類型的情況
+            return False
+        except Exception as e:
+            log.error(f'意外的錯誤,原因:"{e}"')
+            return False
+
+    @staticmethod
+    def is_valid_download_type(dtype: list) -> bool:
+        try:
+            if isinstance(dtype, list):
+                support_dtype: list = [_ for _ in DownloadType()]
+                valid_dtype = []
+                for i in dtype:
+                    if i in support_dtype:
+                        valid_dtype.append(i)
+                    else:
+                        log.warning(f'"{i}"不在支援的下載類型中,已移除。')
+                dtype[:] = valid_dtype
+                return bool(dtype)
+            return False
+        except Exception as e:
+            log.error(f'意外的錯誤,原因:"{e}"')
+            return False
+
+
+class ProcessConfig:
+    PROXY_AUTO_FILL = False
+
+    @staticmethod
+    def __parse_proxy_url(proxy_url: str) -> Optional[dict]:
+        """解析代理URL字串。"""
+        try:
+            if not proxy_url:
+                return None
+
+            # 正則表達式匹配代理URL，支援以下格式：
+            # - http://username:password@host:port
+            # - https://host:port
+            # - socks4://host:port
+            # - socks5://host:port
+            # - host:port (無協議前綴)
+            # - 支援URL末尾有/的情況，如 http://127.0.0.1:10808/
+            pattern = r'^(?:(https?|socks[45][ah]?)://)?(?:[^@]*@)?([^:]+):(\d+)/+$'
+            match = re.match(pattern, proxy_url.lower())
+
+            if not match:
+                return None
+
+            scheme = match.group(1)
+            hostname = match.group(2)
+            port = match.group(3)
+
+            # 如果沒有scheme，預設為http。
+            if not scheme:
+                scheme = 'http'
+            # socks4a和socks5h統一為socks4和socks5。
+            elif scheme in ('socks4a', 'socks5h'):
+                scheme = scheme[:-1]
+
+            # 驗證連接埠號有效性。
+            try:
+                port = int(port)
+            except ValueError:
+                return None
+
+            if not (0 <= port <= 65535):
+                return None
+
+            return {
+                'scheme': scheme,
+                'hostname': hostname,
+                'port': port
+            }
+        except Exception:  # noqa.
+            return None
+
+    @staticmethod
+    def format_proxy_prompt(proxy: dict) -> str:
+        return proxy.get('scheme', '') + '://' + proxy.get('hostname', '') + ':' + str(proxy.get('port', ''))
+
+    @staticmethod
+    def get_unix_proxy() -> Optional[dict]:
+        """從環境變量取得 Unix/Linux/macOS 代理設定。"""
+        env_vars = ['http_proxy', 'HTTP_PROXY', 'https_proxy', 'HTTPS_PROXY', 'all_proxy', 'ALL_PROXY']
+
+        for var in env_vars:
+            proxy_url = os.environ.get(var)
+            if proxy_url:
+                proxy_info = ProcessConfig.__parse_proxy_url(proxy_url)
+                if proxy_info:
+                    return proxy_info
+
+        return None
+
+    @staticmethod
+    def get_windows_proxy() -> Optional[dict]:
+        """從 Windows 註冊表取得代理設定。"""
+        try:
+            import winreg
+            with winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    r'Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+            ) as key:
+                proxy_enable, _ = winreg.QueryValueEx(key, 'ProxyEnable')
+                if not proxy_enable:
+                    return None
+
+                proxy_server, _ = winreg.QueryValueEx(key, 'ProxyServer')
+                if not proxy_server:
+                    return None
+
+                # 使用正則表達式解析代理伺服器字串。
+                # 格式可能是: "http=127.0.0.1:7890;https=127.0.0.1:7890;socks=127.0.0.1:1080"。
+                # 或者是: "127.0.0.1:7890"。
+                proxy_info = {}
+                pattern = r'(\w+)=([^;]+)'
+                matches = re.findall(pattern, proxy_server)
+
+                if matches:
+                    for proto, addr in matches:
+                        proxy_info[proto.lower()] = addr
+                else:
+                    # 如果沒有協議前綴，則整個字串就是代理地址。
+                    proxy_info['http'] = proxy_server
+
+                # 優先級：http > https > socks。
+                proxy_addr = proxy_info.get('http') or proxy_info.get('https') or proxy_info.get('socks')
+
+                if not proxy_addr:
+                    return None
+
+                # 使用正則表達式解析地址和連接埠。
+                addr_pattern = r'^([^:]+):(\d+)$'
+                addr_match = re.match(addr_pattern, proxy_addr)
+
+                if not addr_match:
+                    return None
+
+                hostname = addr_match.group(1)
+                try:
+                    port = int(addr_match.group(2))
+                except ValueError:
+                    return None
+
+                # 判斷協議類型。
+                scheme = 'http'
+                if 'socks5' in proxy_server.lower():
+                    scheme = 'socks5'
+                elif 'socks4' in proxy_server.lower():
+                    scheme = 'socks4'
+                elif 'socks=' in proxy_server.lower():
+                    # 如果只有socks=沒有數字，預設socks5
+                    scheme = 'socks5'
+
+                if not (0 <= port <= 65535):
+                    return None
+
+                return {
+                    'scheme': scheme,
+                    'hostname': hostname,
+                    'port': port
+                }
+
+        except (WindowsError, OSError, ValueError):
+            return None
+
+    @staticmethod
+    def get_system_proxy(param_name: str):
+
+        def decorator(func: Callable) -> Callable:
+            @wraps(func)
+            def wrapper(*args, **kwargs) -> Any:
+                # 嘗試取得系統代理（跨平台）。
+                system_proxy = ProcessConfig.get_windows_proxy() if platform.system() == 'Windows' else ProcessConfig.get_unix_proxy()
+                # 如果成功取得到系統代理並且包含所需的參數。
+                if system_proxy and param_name in system_proxy:
+                    question: str = GetStdioParams.UNDEFINED
+                    if param_name == 'scheme' and ProcessConfig.PROXY_AUTO_FILL is False:
+                        while True:
+                            try:
+                                question = console.input(
+                                    f'取得到系統代理"{ProcessConfig.format_proxy_prompt(system_proxy)}",是否自動填入? - 「y|n」(預設y):').strip().lower()
+                                if question in ('y', ''):
+                                    ProcessConfig.PROXY_AUTO_FILL = True
+                                    break
+                                elif question == 'n':
+                                    break
+                                else:
+                                    log.warning(f'意外的參數:"{question}",支援的參數 - 「y|n」')
+                            except Exception as e:
+                                log.error(f'意外的錯誤,原因:"{e}"')
+                                break
+                    if question in ('y', '') or ProcessConfig.PROXY_AUTO_FILL:
+                        # 提取對應參數的值。
+                        value = system_proxy[param_name]
+                        # 根據參數類型列印相應的提示資訊。
+                        if param_name == 'scheme':
+                            console.print(
+                                f'已從系統代理自動取得「scheme」為:「{value}」',
+                                style=ProcessConfig.stdio_style('scheme')
+                            )
+                            return {
+                                'scheme': value,
+                                'record_flag': True
+                            }
+                        elif param_name == 'hostname':
+                            console.print(
+                                f'已從系統代理自動取得「hostname」為:「{value}」',
+                                style=ProcessConfig.stdio_style('hostname')
+                            )
+                            return {
+                                'hostname': value,
+                                'record_flag': True
+                            }
+                        elif param_name == 'port':
+                            console.print(
+                                f'已從系統代理自動取得「port」為:「{value}」',
+                                style=ProcessConfig.stdio_style('port')
+                            )
+                            return {
+                                'port': value,
+                                'record_flag': True
+                            }
+
+                # 如果沒有取得到系統代理或參數不完整，執行原函數。
+                return func(*args, **kwargs)
+
+            return wrapper
+
+        return decorator
+
+    @staticmethod
+    def set_dtype(_dtype: list) -> list:
+        record_dtype: list = []
+        support_dtype: list = [_ for _ in DownloadType()]
+        for i in _dtype:
+            if i in support_dtype:
+                record_dtype.append(i)
+        return record_dtype
+
+    @staticmethod
+    def get_dtype(download_dtype: list) -> dict:
+        """取得所需下載檔案的類型。"""
+        meta: dict = {}
+        support_dtype: list = [_ for _ in DownloadType()]
+        for dtype in download_dtype:
+            meta[dtype] = True if dtype in support_dtype else False
+        return meta
+
+    @staticmethod
+    def stdio_style(key: str, color=None) -> str:
+        """控制用戶互動時列印出不同的顏色(漸變)。"""
+        if color is None:
+            color = GradientColor.ORANGE2YELLOW_15
+        _stdio_queue: dict = {
+            'api_id': 0,
+            'api_hash': 1,
+            'bot_token': 2,
+            'links': 3,
+            'save_directory': 4,
+            'max_download_task': 5,
+            'max_retry_count': 6,
+            'download_type': 7,
+            'is_shutdown': 8,
+            'enable_proxy': 9,
+            'config_proxy': 10,
+            'scheme': 11,
+            'hostname': 12,
+            'port': 13,
+            'proxy_authentication': 14
+        }
+        return color[_stdio_queue.get(key)]
+
+    @staticmethod
+    def is_proxy_input(proxy_config: dict) -> bool:
+        """檢測代理設定是否需要用戶輸入。"""
+        result: bool = False
+        basic_truth_table: list = []
+        advance_account_truth_table: list = []
+        if proxy_config.get('enable_proxy') is False:  # 檢測開啟了代理但是代理設定錯誤。
+            return False
+        for _ in proxy_config.items():
+            if _[0] in ['scheme', 'port', 'hostname']:
+                basic_truth_table.append(_[1])
+            if _[0] in ['username', 'password']:
+                advance_account_truth_table.append(_[1])
+        if all(basic_truth_table) is False:  # noqa.
+            console.print('請設定代理!', style=ProcessConfig.stdio_style('config_proxy'))
+            console.print(
+                '[#79FCD4]如果對代理設定有疑問[/#79FCD4][#FF79D4]請存取:[/#FF79D4]\n'
+                '[link=https://github.com/Gentlesprite/Telegram_Restricted_Media_Downloader/wiki#設定代理時在代理在本機的情況下]'
+                'https://github.com/Gentlesprite/Telegram_Restricted_Media_Downloader/wiki#設定代理時在代理在本機的情況下[/link]'
+                '\n[#FCFF79]若[/#FCFF79][#FF4689]無法[/#FF4689][#FF7979]存取[/#FF7979][#79FCD4],[/#79FCD4]'
+                '[#FCFF79]可[/#FCFF79][#d4fc79]查閱[/#d4fc79]'
+                '[#FC79A5]軟件壓縮包所提供的[/#FC79A5][#79E2FC]"使用手冊"[/#79E2FC]'
+                '[#79FCD4]資料夾下的[/#79FCD4][#FFB579]"常見問題及解決方案彙總.pdf"[/#FFB579]'
+                '[#79FCB5]中的[/#79FCB5][#D479FC]【問題14】裏的【解決方案】[/#D479FC][#FCE679]進行操作[/#FCE679][#FC79A6]。[/#FC79A6]'
+            )
+            result: bool = True
+        if any(advance_account_truth_table) and all(advance_account_truth_table) is False:
+            log.warning('代理帳號或密碼未輸入!')
+            result: bool = True
+        return result
+
+    @staticmethod
+    def get_proxy_info(proxy_config: dict) -> dict:
+        return {
+            'scheme': proxy_config.get('scheme', '未知'),
+            'hostname': proxy_config.get('hostname', '未知'),
+            'port': proxy_config.get('port', '未知')
+        }
+
+
+class GetStdioParams:
+    UNDEFINED: str = '無'
+
+    @staticmethod
+    def __timeout_input(
+            prompt: str = '',
+            error_prompt: Union[str, None] = None,
+            default: str = '',
+            timeout: int = 5
+    ) -> str:
+        """跨平台的輸入超時後自動設定為預設值,報錯時返回預設input。"""
+
+        def timeout_notice():
+            console.print('\n輸入超時,已自動設定為預設值。\n', style='#FF4689')
+
+        if sys.platform == 'win32':
+            try:
+                import msvcrt
+                console.print(prompt, end='')
+                start_time: float = time.time()
+                input_buffer: list = []
+                last_second: int = timeout
+                countdown_displayed: bool = False
+
+                while True:
+                    elapsed = time.time() - start_time
+                    remaining = int(timeout - elapsed)
+
+                    # 倒計時顯示更新。
+                    if remaining != last_second and remaining >= 0:
+                        if countdown_displayed:
+                            # 刪除之前的倒計時（1位數字+1個空格）。
+                            print('\b \b\b \b', end='', flush=True)
+                        # 顯示新的倒計時（輸入時才顯示）。
+                        if not input_buffer and remaining >= 0:
+                            console.print(f'{remaining} ', end='', style='dim')
+                            countdown_displayed = True
+                        last_second = remaining
+
+                    if msvcrt.kbhit():  # 檢測是否有鍵盤輸入。
+                        # 清除倒計時顯示。
+                        if countdown_displayed:
+                            print('\b \b\b \b', end='', flush=True)
+                            countdown_displayed = False
+
+                        char = msvcrt.getwch()
+                        if char == '\r':  # 按 Enter鍵結束輸入。
+                            user_input = ''.join(input_buffer)
+                            print('\n') if user_input in ('y', 'n', '') else None
+                            return user_input.strip() or default
+                        elif char in ('\x08', '\b'):  # Backspace鍵處理。
+                            if input_buffer:
+                                input_buffer.pop()
+                                print('\b \b', end='', flush=True)  # 刪除控制枱上的最後一個字元。
+                        elif char in ('\x00', '\xe0'):  # 上下左右鍵。
+                            _ = msvcrt.getwch()
+                        else:
+                            input_buffer.append(char)
+                            console.print(char, end='')
+                        last_second = -1  # 輸入開始後不再顯示倒計時。
+                    elif elapsed > timeout:
+                        timeout_notice()
+                        return default
+                    time.sleep(0.1)
+            except Exception as e:
+                log.exception(f'無法自動設定!請手動進行設定,{_t(KeyWord.REASON)}:"{e}"')
+                return console.input(error_prompt if error_prompt else prompt)
+        else:
+            import tty
+            import select
+            import termios
+
+            console.print(prompt, end='')
+            sys.stdout.flush()
+
+            # 儲存原始終端機設定。
+            old_settings = termios.tcgetattr(sys.stdin)
+            elapsed = 0
+            try:
+                # 設定終端機為原始模式,允許逐字元讀取。
+                tty.setraw(sys.stdin.fileno())
+
+                start_time: float = time.time()
+                input_buffer: list = []
+                last_second: int = timeout
+                countdown_displayed: bool = False
+                while True:
+                    elapsed = time.time() - start_time
+                    remaining = int(timeout - elapsed)
+
+                    # 倒計時顯示更新。
+                    if remaining != last_second and remaining >= 0:
+                        if countdown_displayed:
+                            # 刪除之前的倒計時（數字+空格）。
+                            backspace_count = len(str(last_second)) + 1
+                            sys.stdout.write('\b \b' * backspace_count)
+                            sys.stdout.flush()
+                        # 顯示新的倒計時（輸入時才顯示）。
+                        if not input_buffer and remaining >= 0:
+                            console.print(f'{remaining} ', end='', style='dim')
+                            sys.stdout.flush()
+                            countdown_displayed = True
+                        last_second = remaining
+
+                    # 使用select檢測輸入,超時0.1秒以便更新倒計時。
+                    ready, _, _ = select.select([sys.stdin], [], [], 0.1)
+
+                    if ready:
+                        # 清除倒計時顯示。
+                        if countdown_displayed:
+                            backspace_count = len(str(remaining)) + 1
+                            sys.stdout.write('\b \b' * backspace_count)
+                            sys.stdout.flush()
+                            countdown_displayed = False
+
+                        # 讀取一個字元。
+                        char = sys.stdin.read(1)
+
+                        if char == '\r' or char == '\n':  # 按 Enter鍵結束輸入。
+                            user_input = ''.join(input_buffer)
+                            sys.stdout.write('\n')
+                            sys.stdout.flush()
+                            return user_input.strip() or default
+                        elif char == '\x7f' or char == '\b':  # Backspace/Delete鍵處理。
+                            if input_buffer:
+                                input_buffer.pop()
+                                sys.stdout.write('\b \b')
+                                sys.stdout.flush()
+                        elif char == '\x1b':  # 轉義序列（上下左右鍵等）。
+                            # 讀取接下來的兩個字元。
+                            _ = sys.stdin.read(2)
+                        elif ord(char) >= 32:  # 可列印字元。
+                            input_buffer.append(char)
+                            sys.stdout.write(char)
+                            sys.stdout.flush()
+                        last_second = -1  # 輸入開始後不再顯示倒計時。
+
+                    elif elapsed > timeout:
+                        # 清除倒計時顯示。
+                        if countdown_displayed:
+                            backspace_count = len(str(remaining)) + 1
+                            sys.stdout.write('\b \b' * backspace_count)
+                            sys.stdout.flush()
+                        return default
+            except Exception as e:
+                log.exception(f'無法自動設定!請手動進行設定,{_t(KeyWord.REASON)}:"{e}"')
+                return console.input(error_prompt if error_prompt else prompt)
+            finally:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)  # 恢復終端機設定。
+                timeout_notice() if elapsed > timeout else print()
+
+    @staticmethod
+    def get_is_ki_save_config(valid_format: str = 'y|n') -> dict:
+        while True:
+            is_save_config: str = console.input(
+                f'「退出提示」是否需要儲存目前已填寫的參數? - 「{valid_format}」:').strip().lower()
+            if is_save_config == 'y':
+                return {'is_ki_save_config': True}
+            elif is_save_config == 'n':
+                return {'is_ki_save_config': False}
+            else:
+                log.warning(f'意外的參數:"{is_save_config}",支援的參數 - 「{valid_format}」')
+
+    @staticmethod
+    def get_is_re_config(valid_format: str = 'y|n') -> dict:
+        prompt: str = f'檢測到已設定完成的設定檔,是否需要重新設定?(設定檔將自動備份) - 「{valid_format}」'
+        timeout: int = 5
+        while True:
+            is_re_config: str = GetStdioParams.__timeout_input(
+                prompt=f'{prompt}:',
+                error_prompt=f'{prompt}(預設n):',
+                default='n',
+                timeout=timeout
+            ).strip().lower()
+            if is_re_config == 'y':
+                return {'is_re_config': True}
+            elif is_re_config in ('n', ''):
+                return {'is_re_config': False}
+            else:
+                console.print('\n') if sys.platform == 'win32' else None
+                log.warning(f'意外的參數:"{is_re_config}",支援的參數 - 「{valid_format}」(預設n)')
+
+    @staticmethod
+    def get_is_change_account(valid_format: str = 'y|n') -> dict:
+        style: str = '#FF4689'
+        while True:
+            is_change_account = console.input(
+                '是否需要切換帳號? - 「y|n」(預設n):').strip().lower()
+            if is_change_account in ('n', ''):
+                console.print('用戶不需要切換「帳號」。', style=style)
+                return {'is_change_account': False}
+            elif is_change_account == 'y':
+                console.print('用戶需要切換「帳號」。', style=style)
+                return {'is_change_account': True}
+            else:
+                log.warning(f'意外的參數:"{is_change_account}",支援的參數 - 「{valid_format}」!')
+
+    @staticmethod
+    def get_session_directory():
+        style: str = '#FF4689'
+        while True:
+            session_directory = console.input(
+                '請輸入「會話檔案目錄」(可為「空目錄」,也可為「已登入的會話檔案目錄」):').strip()
+            console.print(f'「會話資料夾的路徑」設定為:{session_directory}。', style=style)
+            return {'session_directory': session_directory}
+
+    @staticmethod
+    def get_api_id(last_record: str) -> dict:
+        while True:
+            api_id = console.input(
+                f'請輸入「api_id」上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」:').strip()
+            if api_id == '' and last_record is not None:
+                api_id = last_record
+            if Validator.is_valid_api_id(api_id):
+                console.print(f'已設定「api_id」為:「{api_id}」', style=ProcessConfig.stdio_style('api_id'))
+                return {
+                    'api_id': api_id,
+                    'record_flag': True
+                }
+
+    @staticmethod
+    def get_api_hash(last_record: str, valid_length: int = 32) -> dict:
+        while True:
+            api_hash = console.input(
+                f'請輸入「api_hash」上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」:').strip().lower()
+            if api_hash == '' and last_record is not None:
+                api_hash = last_record
+            if Validator.is_valid_api_hash(api_hash, valid_length):
+                console.print(f'已設定「api_hash」為:「{api_hash}」', style=ProcessConfig.stdio_style('api_hash'))
+                return {
+                    'api_hash': api_hash,
+                    'record_flag': True
+                }
+            else:
+                log.warning(f'意外的參數:"{api_hash}",不是一個「{valid_length}位」的「值」!請重新輸入!')
+
+    @staticmethod
+    def get_enable_bot(valid_format: str = 'y|n') -> dict:
+        while True:
+            enable_bot = console.input('是否啟用「機械人」(需要提供bot_token)? - 「y|n」(預設n):').strip().lower()
+            if enable_bot in ('n', ''):
+                console.print(f'已設定為不啟用「機械人」。', style=ProcessConfig.stdio_style('bot_token'))
+                return {'enable_bot': False}
+            elif enable_bot == 'y':
+                console.print(f'請設定「bot_token」。', style=ProcessConfig.stdio_style('bot_token'))
+                return {'enable_bot': True}
+            else:
+                log.warning(f'意外的參數:"{enable_bot}",支援的參數 - 「{valid_format}」!')
+
+    @staticmethod
+    def get_bot_token(last_record: str, valid_format: str = ':') -> dict:
+        while True:
+            bot_token = console.input(
+                f'請輸入目前帳號的「bot_token」上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」:').strip()
+            if bot_token == '' and last_record is not None:
+                bot_token = last_record
+            if Validator.is_valid_bot_token(bot_token, valid_format):
+                console.print(f'已設定「bot_token」為:「{bot_token}」', style=ProcessConfig.stdio_style('bot_token'))
+                return {
+                    'bot_token': bot_token,
+                    'record_flag': True
+                }
+            else:
+                log.warning(f'意外的參數:"{bot_token}",「bot_token」中需要包含":",請重新輸入!')
+
+    @staticmethod
+    def get_links(last_record: str, valid_format: str = '.txt', enable_bot: bool = False) -> dict:
+        # 輸入需要下載的媒體連結檔案路徑,確保檔案存在。
+        links_file_path = None
+        while True:
+            try:
+                bot_notice = '(檢測到已設定機械人,此步驟可忽略)' if enable_bot else ''
+                links_file_path = console.input(
+                    f'請輸入需要下載的媒體連結的「完整路徑」。上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
+                    f'格式 - 「{valid_format}」{bot_notice}:').strip()
+                if links_file_path == '':
+                    if last_record is not None:
+                        links_file_path = last_record
+                    elif bot_notice:
+                        links_file_path = os.path.join(os.getcwd(), 'links.txt')
+                if links_file_path and not os.path.exists(links_file_path):
+                    try:
+                        with open(file=links_file_path, mode='w', encoding='UTF-8'):
+                            pass
+                    except Exception as e:
+                        log.warning(f'無法建立檔案:"{links_file_path}"請排查權限問題,{_t(KeyWord.REASON)}:"{e}"')
+                if Validator.is_valid_links_file(links_file_path, valid_format):
+                    console.print(f'已設定「links」為:「{links_file_path}」', style=ProcessConfig.stdio_style('links'))
+                    Validator.is_contain_chinese(links_file_path)
+                    return {
+                        'links': links_file_path,
+                        'record_flag': True
+                    }
+                elif not os.path.normpath(links_file_path).lower().endswith('.txt'):
+                    log.warning(f'意外的參數:"{links_file_path}",檔案路徑必須以「{valid_format}」結尾,請重新輸入!')
+                else:
+                    log.warning(
+                        f'意外的參數:"{links_file_path}",檔案「必須存在」(區分大小寫),請重新輸入!')
+            except Exception as e:
+                log.warning(
+                    f'意外的參數:"{links_file_path}",檔案路徑必須以「{valid_format}」結尾,並且「必須存在」,請重新輸入!{_t(KeyWord.REASON)}:"{e}"')
+
+    @staticmethod
+    def get_save_directory(last_record) -> dict:
+        # 輸入媒體儲存路徑,確保是一個有效的目錄路徑。
+        while True:
+            save_directory = console.input(
+                f'請輸入媒體「儲存路徑」。上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」:').strip()
+            if save_directory == '':
+                if last_record is not None:
+                    save_directory = last_record
+                else:
+                    save_directory = os.path.join(os.getcwd(), 'downloads')
+                    log.warning('沒有上一次的記錄,已設定為預設目錄。')
+            if Validator.is_valid_save_directory(save_directory):
+                console.print(f'已設定「save_directory」為:「{save_directory}」',
+                              style=ProcessConfig.stdio_style('save_directory'))
+                Validator.is_contain_chinese(save_directory)
+                return {
+                    'save_directory': save_directory,
+                    'record_flag': True
+                }
+            elif os.path.isfile(save_directory):
+                log.warning(f'意外的參數:"{save_directory}",指定的路徑是一個檔案並非目錄,請重新輸入!')
+            else:
+                log.warning(f'意外的參數:"{save_directory}",指定的路徑無效或不是一個目錄,請重新輸入!')
+
+    @staticmethod
+    def get_max_download_task(last_record) -> dict:
+        # 輸入最大下載任務數,確保是一個整數且不超過特定限制。
+        default_prompt: str = '(預設3)' if last_record is None else ''
+        while True:
+            try:
+                max_download_task = console.input(
+                    f'請輸入「最大下載任務數」。上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
+                    f',值過高可能會導致網絡相關問題,建議預設{default_prompt}:').strip()
+                if max_download_task == '' and last_record is not None:
+                    max_download_task = last_record
+                if max_download_task == '':
+                    max_download_task = 3
+                if Validator.is_valid_number(max_download_task):
+                    console.print(f'已設定「max_download_task」為:「{max_download_task}」',
+                                  style=ProcessConfig.stdio_style('max_download_task'))
+                    return {
+                        'max_download_task': int(max_download_task),
+                        'record_flag': True
+                    }
+                else:
+                    log.warning(f'意外的參數:"{max_download_task}",任務數必須是「正整數」,請重新輸入!')
+            except Exception as e:
+                log.error(f'意外的錯誤,{_t(KeyWord.REASON)}:"{e}"')
+
+    @staticmethod
+    def get_max_retry_count(last_record) -> dict:
+        default_prompt: str = '(預設5)' if last_record is None else ''
+        while True:
+            try:
+                max_retry_count = console.input(
+                    f'請輸入任務失敗時「最大重試次數」。上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」{default_prompt}:').strip()
+                if max_retry_count == '' and last_record is not None:
+                    max_retry_count = last_record
+                if max_retry_count == '':
+                    max_retry_count = 5
+                if Validator.is_valid_number(max_retry_count):
+                    console.print(f'已設定「max_retry_count」為:「{max_retry_count}」',
+                                  style=ProcessConfig.stdio_style('max_retry_count'))
+                    return {
+                        'max_retry_count': int(max_retry_count),
+                        'record_flag': True
+                    }
+                else:
+                    log.warning(f'意外的參數:"{max_retry_count}",最大重試次數必須是「正整數」,請重新輸入!')
+            except Exception as e:
+                log.error(f'意外的錯誤,{_t(KeyWord.REASON)}:"{e}"')
+
+    @staticmethod
+    def get_download_type(last_record: Union[list, None]) -> dict:
+        if isinstance(last_record, list):
+            meta: dict = ProcessConfig.get_dtype(download_dtype=last_record)
+            record: list = []
+            for i in meta.items():
+                dtype, _ = i
+                if meta.get(dtype) is True:  # noqa.
+                    record.append(dtype)
+            last_record: str = ' '.join(record)
+        default_prompt: str = '(預設為所有已支援的下載類型)' if last_record is None else ''
+        while True:
+            download_type: Union[str, list] = console.input(
+                f'輸入需要下載的「媒體類型」(以空格分隔可多選)。上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
+                f'格式 - 「video photo document audio voice animation video_note live_photo」{default_prompt}:').strip()
+            if download_type == '' and last_record is not None:
+                download_type = last_record
+            if download_type == '':
+                download_type = [_ for _ in DownloadType()]
+            download_type: list = list(set(download_type.split())) if isinstance(download_type, str) else download_type
+            if Validator.is_valid_download_type(download_type):
+                dtype = ' '.join(download_type) if download_type else [_ for _ in DownloadType()]
+                console.print(
+                    f'已設定「download_type」為:「{dtype}」',
+                    style=ProcessConfig.stdio_style('download_type')
+                )
+                return {
+                    'download_type': ProcessConfig.set_dtype(_dtype=download_type),
+                    'record_flag': True
+                }
+            else:
+                prompt: str = f'意外的參數:"{download_type}"' if download_type else '請重新輸入下載類型'
+                log.warning(f'{prompt},支援的參數 - 「video photo document」(以空格分隔可多選)')
+
+    @staticmethod
+    def get_is_shutdown(last_record: str, valid_format: str = 'y|n') -> dict:
+        _style: str = ProcessConfig.stdio_style('is_shutdown')
+        if last_record:
+            last_record: str = 'y'
+        elif last_record is False:  # noqa.
+            last_record: str = 'n'
+        else:
+            last_record = GetStdioParams.UNDEFINED
+        t = f'已設定「is_shutdown」為:「y」,下載完成後將自動關機!'  # v1.3.0 修復設定is_shutdown參數時顯示錯誤。
+        f = f'已設定「is_shutdown」為:「n」'
+        default_prompt: str = '(預設n)' if last_record == GetStdioParams.UNDEFINED else ''
+        while True:
+            try:
+                is_shutdown = console.input(
+                    f'下載完成後是否「自動關機」。上一次的記錄是:「{last_record}」 - 「{valid_format}」'
+                    f'{default_prompt}:').strip().lower()
+                if is_shutdown == '' and last_record != GetStdioParams.UNDEFINED:
+                    if last_record == 'y':
+                        console.print(t, style=_style)
+                        return {'is_shutdown': True, 'record_flag': True}
+                    elif last_record == 'n':
+                        console.print(f, style=_style)
+                        return {'is_shutdown': False, 'record_flag': True}
+
+                elif is_shutdown == 'y':
+                    console.print(t, style=_style)
+                    return {'is_shutdown': True, 'record_flag': True}
+                elif is_shutdown in ('n', ''):
+                    console.print(f, style=_style)
+                    return {'is_shutdown': False, 'record_flag': True}
+                else:
+                    log.warning(f'意外的參數:"{is_shutdown}",支援的參數 - 「{valid_format}」')
+
+            except Exception as e:
+                log.error(f'意外的錯誤,{_t(KeyWord.REASON)}:"{e}"')
+
+    @staticmethod
+    def get_enable_proxy(last_record: Union[str, bool], valid_format: str = 'y|n') -> dict:
+        if last_record:
+            ep_notice: str = 'y' if last_record else 'n'
+        else:
+            ep_notice: str = GetStdioParams.UNDEFINED
+        default_prompt: str = '(預設n)' if ep_notice == GetStdioParams.UNDEFINED else ''
+        while True:  # 詢問是否開啟代理。
+            enable_proxy = console.input(
+                f'是否需要使用「代理」。上一次的記錄是:「{ep_notice}」'
+                f'格式 - 「{valid_format}」{default_prompt}:').strip().lower()
+            if enable_proxy == '' and last_record is not None:
+                if last_record is True:
+                    enable_proxy = 'y'
+                elif last_record is False:
+                    enable_proxy = 'n'
+            elif enable_proxy == '':
+                enable_proxy = 'n'
+            if Validator.is_valid_enable_proxy(enable_proxy):
+                if enable_proxy == 'y':
+                    console.print(f'已設定「enable_proxy」為:「{enable_proxy}」',
+                                  style=ProcessConfig.stdio_style('enable_proxy'))
+                    return {'enable_proxy': True, 'record_flag': True}
+                elif enable_proxy == 'n':
+                    console.print(f'已設定「enable_proxy」為:「{enable_proxy}」',
+                                  style=ProcessConfig.stdio_style('enable_proxy'))
+                    return {'enable_proxy': False, 'record_flag': True}
+            else:
+                log.error(f'意外的參數:"{enable_proxy}",請輸入有效參數!支援的參數 - 「{valid_format}」!')
+
+    @staticmethod
+    @ProcessConfig.get_system_proxy('scheme')
+    def get_scheme(last_record: str, valid_format: list) -> dict:
+        if valid_format is None:
+            valid_format: list = ['http', 'socks4', 'socks5']
+        fmt_valid_format = '|'.join(valid_format)
+        while True:  # v1.3.0 修復代理設定scheme參數設定拋出AttributeError。
+            scheme = console.input(
+                f'請輸入「代理類型」。上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
+                f'格式 - 「{fmt_valid_format}」:').strip().lower()
+            if scheme == '' and last_record is not None:
+                scheme = last_record
+            if Validator.is_valid_scheme(scheme, valid_format):
+                console.print(f'已設定「scheme」為:「{scheme}」', style=ProcessConfig.stdio_style('scheme'))
+                return {
+                    'scheme': scheme,
+                    'record_flag': True
+                }
+            else:
+                log.warning(
+                    f'意外的參數:"{scheme}",請輸入有效的代理類型!支援的參數 - 「{fmt_valid_format}」!')
+
+    @staticmethod
+    @ProcessConfig.get_system_proxy('hostname')
+    def get_hostname(proxy_config: dict, last_record: str, valid_format: str = 'x.x.x.x'):
+        hostname = None
+        while True:
+            scheme, _, __ = ProcessConfig.get_proxy_info(proxy_config).values()
+            # 輸入代理IP地址。
+            try:
+                hostname = console.input(
+                    f'請輸入代理類型為:"{scheme}"的「ip地址」。上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
+                    f'格式 - 「{valid_format}」:').strip()
+                if hostname == '' and last_record is not None:
+                    hostname = last_record
+                if Validator.is_valid_hostname(hostname):
+                    console.print(f'已設定「hostname」為:「{hostname}」', style=ProcessConfig.stdio_style('hostname'))
+                    return {
+                        'hostname': hostname,
+                        'record_flag': True
+                    }
+            except ValueError:
+                log.warning(
+                    f'"{hostname}"不是一個「ip地址」,請輸入有效的ipv4地址!支援的參數 - 「{valid_format}」!')
+
+    @staticmethod
+    @ProcessConfig.get_system_proxy('port')
+    def get_port(proxy_config: dict, last_record: str, valid_format: str = '0~65535'):
+        port = None
+        # 輸入代理連接埠。
+        while True:
+            try:  # hostname,scheme可能出現None。
+                scheme, hostname, __ = ProcessConfig.get_proxy_info(proxy_config).values()
+                port = console.input(
+                    f'請輸入ip地址為:"{hostname}",代理類型為:"{scheme}"的「代理連接埠」。'
+                    f'上一次的記錄是:「{last_record if last_record else GetStdioParams.UNDEFINED}」'
+                    f'格式 - 「{valid_format}」:').strip()
+                if port == '' and last_record is not None:
+                    port = last_record
+                if Validator.is_valid_port(port):
+                    console.print(f'已設定「port」為:「{port}」', style=ProcessConfig.stdio_style('port'))
+                    return {
+                        'port': int(port),
+                        'record_flag': True
+                    }
+                else:
+                    log.warning(f'意外的參數:"{port}",連接埠號必須在「{valid_format}」之間!')
+            except ValueError:
+                log.warning(f'意外的參數:"{port}",請輸入一個有效的整數!支援的參數 - 「{valid_format}」')
+            except Exception as e:
+                log.error(f'意外的錯誤,{_t(KeyWord.REASON)}:"{e}"')
+
+    @staticmethod
+    def get_proxy_authentication():
+        # 是否需要認證。
+        style = ProcessConfig.stdio_style('proxy_authentication')
+        valid_format: str = 'y|n'
+        while True:
+            is_proxy = console.input(f'代理是否需要「認證」? - 「{valid_format}」(預設n):').strip().lower()
+            if is_proxy == 'y':
+                username = console.input('請輸入「帳號」:').strip()
+                password = console.input('請輸入「密碼」:').strip()
+                console.print(f'已設定為:「代理需要認證」', style=style)
+                return {'username': username, 'password': password, 'record_flag': True}
+            elif is_proxy in ('n', ''):
+                console.print(f'已設定為:「代理不需要認證」', style=style)
+                return {'username': None, 'password': None, 'record_flag': True}
+            else:
+                log.warning(f'意外的參數:"{is_proxy}",支援的參數 - 「{valid_format}」!')
+
+
+class BotCommandText:
+    HELP: tuple = ('help', '展示可用命令。')
+    DOWNLOAD: tuple = (
+        'download', '分配新的下載任務(多種使用方式見使用說明)。\n`/download https://t.me/x/x 起始ID 結束ID`')
+    TABLE: tuple = ('table', '在終端機輸出目前下載情況的統計資訊。')
+    FORWARD: tuple = ('forward', '從頻道A轉發至頻道B 起始ID 結束ID。\n`/forward https://t.me/A https://t.me/B 1 100`')
+    EXIT: tuple = ('exit', '退出軟件。')
+    LISTEN_DOWNLOAD: tuple = ('listen_download',
+                              '即時監聽該連結的最新訊息(影片和圖片)進行下載。\n`/listen_download https://t.me/A https://t.me/B https://t.me/n`')
+    LISTEN_FORWARD: tuple = (
+        'listen_forward', '即時監聽該連結的最新訊息(任意訊息)進行轉發。\n`/listen_forward 監聽頻道 轉發頻道`')
+    LISTEN_INFO: tuple = ('listen_info', '查看目前已經建立的監聽資訊。')
+    UPLOAD: tuple = ('upload', '上載本機的檔案到指定頻道。`/upload 本機檔案 目標頻道`')
+    UPLOAD_R: tuple = ('upload_r', '遞迴上載資料夾(包含子資料夾)到指定頻道。`/upload_r 本機資料夾 目標頻道`')
+    DOWNLOAD_CHAT: tuple = ('download_chat', '下載指定頻道並支援通過內聯鍵盤自訂內容過濾。`/download_chat 頻道連結`')
+
+    @staticmethod
+    def with_description(text: tuple) -> str:
+        return f'/{text[0]} - {text[1]}'
+
+
+class BotCallbackText:
+    NULL: str = 'null'
+    LINK_TABLE: str = 'link_table'
+    COUNT_TABLE: str = 'count_table'
+    UPLOAD_TABLE: str = 'upload_table'
+    BACK_HELP: str = 'back_help'
+    BACK_TABLE: str = 'back_table'
+    NOTICE: str = 'notice'
+    DOWNLOAD: str = 'download'
+    DOWNLOAD_UPLOAD: str = 'download_upload'
+    REMOVE_LISTEN_DOWNLOAD: str = 'rld'
+    REMOVE_LISTEN_FORWARD: str = 'rlf'
+    LOOKUP_LISTEN_INFO: str = 'lookup_listen_info'
+    EXPORT_LINK_TABLE: str = 'export_link_table'
+    EXPORT_COUNT_TABLE: str = 'export_count_table'
+    EXPORT_UPLOAD_TABLE: str = 'export_upload_table'
+    TOGGLE_LINK_TABLE: str = 'toggle_link_table'
+    TOGGLE_COUNT_TABLE: str = 'toggle_count_table'
+    TOGGLE_UPLOAD_TABLE: str = 'toggle_upload_table'
+    TOGGLE_FORWARD_VIDEO: str = 'toggle_forward_video'
+    TOGGLE_FORWARD_PHOTO: str = 'toggle_forward_photo'
+    TOGGLE_FORWARD_AUDIO: str = 'toggle_forward_audio'
+    TOGGLE_FORWARD_VOICE: str = 'toggle_forward_voice'
+    TOGGLE_FORWARD_ANIMATION: str = 'toggle_forward_animation'
+    TOGGLE_FORWARD_DOCUMENT: str = 'toggle_forward_document'
+    TOGGLE_FORWARD_TEXT: str = 'toggle_forward_text'
+    TOGGLE_FORWARD_VIDEO_NOTE: str = 'toggle_forward_video_note'
+    TOGGLE_FORWARD_LIVE_PHOTO: str = 'toggle_forward_live_photo'
+    TOGGLE_DOWNLOAD_VIDEO: str = 'toggle_download_video'
+    TOGGLE_DOWNLOAD_PHOTO: str = 'toggle_download_photo'
+    TOGGLE_DOWNLOAD_AUDIO: str = 'toggle_download_audio'
+    TOGGLE_DOWNLOAD_VOICE: str = 'toggle_download_voice'
+    TOGGLE_DOWNLOAD_ANIMATION: str = 'toggle_download_animation'
+    TOGGLE_DOWNLOAD_DOCUMENT: str = 'toggle_download_document'
+    TOGGLE_DOWNLOAD_VIDEO_NOTE: str = 'toggle_download_video_note'
+    TOGGLE_DOWNLOAD_LIVE_PHOTO: str = 'toggle_download_live_photo'
+    EXPORT_TABLE: str = 'export_table'
+    SHUTDOWN: str = 'shutdown'
+    SETTING: str = 'setting'
+    UPLOAD_SETTING: str = 'upload_setting'
+    DOWNLOAD_SETTING: str = 'download_setting'
+    FORWARD_SETTING: str = 'forward_setting'
+    UPLOAD_DOWNLOAD: str = 'upload_download'
+    UPLOAD_DOWNLOAD_DELETE: str = 'upload_download_delete'
+    DOWNLOAD_CHAT_ID: str = 'download_chat_id'
+    DOWNLOAD_CHAT_ID_CANCEL: str = 'download_chat_id_cancel'
+    DOWNLOAD_CHAT_FILTER: str = 'download_chat_filter'
+    DOWNLOAD_CHAT_DATE_FILTER: str = 'download_chat_date_filter'
+    DOWNLOAD_CHAT_DTYPE_FILTER: str = 'download_chat_dtype_filter'
+    DOWNLOAD_CHAT_KEYWORD_FILTER: str = 'download_chat_keyword_filter'
+    TOGGLE_DOWNLOAD_CHAT_DTYPE_VIDEO: str = 'toggle_download_chat_video'
+    TOGGLE_DOWNLOAD_CHAT_DTYPE_PHOTO: str = 'toggle_download_chat_photo'
+    TOGGLE_DOWNLOAD_CHAT_DTYPE_AUDIO: str = 'toggle_download_chat_audio'
+    TOGGLE_DOWNLOAD_CHAT_DTYPE_VOICE: str = 'toggle_download_chat_voice'
+    TOGGLE_DOWNLOAD_CHAT_DTYPE_ANIMATION: str = 'toggle_download_chat_animation'
+    TOGGLE_DOWNLOAD_CHAT_DTYPE_DOCUMENT: str = 'toggle_download_chat_document'
+    TOGGLE_DOWNLOAD_CHAT_DTYPE_VIDEO_NOTE: str = 'toggle_download_chat_video_note'
+    TOGGLE_DOWNLOAD_CHAT_DTYPE_LIVE_PHOTO: str = 'toggle_download_chat_live_photo'
+    TOGGLE_DOWNLOAD_CHAT_COMMENT: str = 'toggle_download_chat_comment'
+    CALENDAR_CONFIRM: str = 'calendar_confirm'
+    FILTER_START_DATE: str = 'filter_start_date'
+    FILTER_END_DATE: str = 'filter_end_date'
+    DROP_KEYWORD: str = 'drop_keyword'
+    IGNORE_KEYWORD: str = 'ignore_keyword'
+    CONFIRM_KEYWORD: str = 'confirm_keyword'
+    CANCEL_KEYWORD_INPUT: str = 'cancel_keyword_input'
+
+    def __iter__(self):
+        for key, value in vars(self.__class__).items():
+            if not key.startswith('__') and not callable(value):  # 排除特殊方法和屬性。
+                yield value
+
+
+class BotMessage:
+    RIGHT: str = '✅以下連結已建立下載任務:\n'
+    INVALID: str = '🚫以下連結不合法已被移除:\n'
+    NOTICE: str = '📢通知:\n'
+
+
+class BotButton:
+    GITHUB: str = '📦GitHub'
+    SUBSCRIBE_CHANNEL: str = '📌訂閱頻道'
+    VIDEO_TUTORIAL: str = '🎬影片教學'
+    OPEN_NOTICE: str = '📢啟用通知'
+    CLOSE_NOTICE: str = '🔕禁用通知'
+    LINK_TABLE: str = '🔗連結統計表'
+    COUNT_TABLE: str = '➕計數統計表'
+    UPLOAD_TABLE: str = '📤上載統計表'
+    HELP_PAGE: str = '🛎️說明頁面'
+    CLICK_VIEW: str = '🖱點擊查看'
+    CLICK_DOWNLOAD: str = '🖱點擊下載'
+    DOWNLOAD: str = '⬇️下載'
+    DOWNLOAD_UPLOAD: str = '↕️下載後上載'
+    TASK_ASSIGN: str = '🌟任務已分配'
+    RETRIEVE_MESSAGE: str = '🔎檢索訊息中'
+    RETRIEVE_COMMENT: str = '🔎檢索評論區中'
+    ASSIGNING_TASK: str = '🚛分配任務中'
+    TASK_CANCEL: str = '🗑️任務已取消'
+    EXECUTE_TASK: str = '▶️執行任務'
+    CANCEL_TASK: str = '⏹️取消任務'
+    OK: str = '✅確定'
+    CANCEL: str = '❌取消'
+    DROP: str = '🗑️移除'
+    IGNORE: str = '👁️‍🗨️忽略'
+    RETURN: str = '🔙返回'
+    CONFIRM_AND_RETURN: str = '↩️確定並返回'
+    LOOKUP_LISTEN_INFO: str = '🔍查看監聽資訊'
+    EXPORT_TABLE: str = '📊匯出表格'
+    RESELECT: str = '🔄重新選擇'
+    SETTING: str = '⚙️設定'
+    OPEN_LINK_TABLE: str = '🔓啟用匯出連結表格'
+    CLOSE_LINK_TABLE: str = '🔒禁用匯出連結表格'
+    OPEN_COUNT_TABLE: str = '🔓啟用匯出計數表格'
+    CLOSE_COUNT_TABLE: str = '🔒禁用匯出計數表格'
+    OPEN_UPLOAD_TABLE: str = '🔓啟用匯出上載表格'
+    CLOSE_UPLOAD_TABLE: str = '🔒禁用匯出上載表格'
+    OPEN_EXIT_SHUTDOWN: str = '✅啟用退出後關機'
+    CLOSE_EXIT_SHUTDOWN: str = '❌禁用退出後關機'
+    ALREADY_REMOVE: str = '✅已移除'
+    UPLOAD_SETTING: str = '📤上載設定'
+    DOWNLOAD_SETTING: str = '📥下載設定'
+    FORWARD_SETTING: str = '↗️轉發設定'
+    OPEN_UPLOAD_DOWNLOAD: str = '🔓啟用下載後上載'
+    CLOSE_UPLOAD_DOWNLOAD: str = '🔒禁用下載後上載'
+    OPEN_UPLOAD_DOWNLOAD_DELETE: str = '🔓啟用下載後上載並刪除'
+    CLOSE_UPLOAD_DOWNLOAD_DELETE: str = '🔒禁用下載後上載並刪除'
+    VIDEO_ON: str = '🎬影片 ✅'
+    PHOTO_ON: str = '🖼️圖片 ✅'
+    AUDIO_ON: str = '🎵音訊 ✅'
+    VOICE_ON: str = '🎤語音 ✅'
+    ANIMATION_ON: str = '🎨GIF ✅'
+    DOCUMENT_ON: str = '📄檔案 ✅'
+    TEXT_ON: str = '💬文字訊息 ✅'
+    VIDEO_NOTE_ON: str = '📹影片筆記 ✅'
+    LIVE_PHOTO_ON: str = '📸實況圖片 ✅'
+    VIDEO_OFF: str = '🎬影片 ❌'
+    PHOTO_OFF: str = '🖼️圖片 ❌'
+    AUDIO_OFF: str = '🎵音訊 ❌'
+    VOICE_OFF: str = '🎤語音 ❌'
+    ANIMATION_OFF: str = '🎨GIF ❌'
+    DOCUMENT_OFF: str = '📄檔案 ❌'
+    TEXT_OFF: str = '💬文字訊息 ❌'
+    VIDEO_NOTE_OFF: str = '📹影片筆記 ❌'
+    LIVE_PHOTO_OFF: str = '📸實況圖片 ❌'
+    DATE_RANGE_SETTING: str = '📅設定日期範圍'
+    SELECT_START_DATE: str = '⏮️選擇起始日期'
+    SELECT_END_DATE: str = '⏭️選擇結束日期'
+    INPUT_KEYWORD: str = '⌨️請向我發送關鍵詞'
+    DOWNLOAD_DTYPE_SETTING: str = '📝設定下載類型'
+    KEYWORD_FILTER_SETTING: str = '🔑設定匹配關鍵詞'
+    CONFIRM_KEYWORD: str = '✅確認關鍵詞'
+    INCLUDE_COMMENT: str = '✅包含評論區'
+    IGNORE_COMMENT: str = '❌包含評論區'

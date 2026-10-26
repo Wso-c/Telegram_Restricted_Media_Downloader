@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="darkreader-lock">
+<title>TRMD</title>
+<link rel="icon" type="image/x-icon" href="img/favicon.ico">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body data-bot="__HAS_BOT__">
+<canvas class="bg-gradient" id="bgGradient" width="100" height="100" data-colors="#4f5bd5,#962fbf,#dd6cb9,#fec496"></canvas>
+<div class="wrap">
+<header>
+    <div class="topbar">
+        <div class="brand">
+            <span class="logo">TRMD
+                <span class="logo-tip" id="logoVersion">
+                    <span class="tip-row"><span class="tip-key">TRMD</span><span class="tip-val" id="tipTrmd">__VERSION__</span></span>
+                    <span class="tip-row"><span class="tip-key">Pyrogram</span><span class="tip-val" id="tipPyrogram">__PYROGRAM_VERSION__</span></span>
+                </span>
+            </span>
+            <div class="status">
+                <span class="dot" id="dot"></span>
+                <span id="statusText">空閒 · 等待任務</span>
+            </div>
+        </div>
+        <div class="top-actions">
+            <div class="menu-wrap" id="menuWrap">
+                <button class="menu-btn" id="menuBtn" type="button" title="更多">☰</button>
+                <div class="menu-dropdown" id="menuDropdown" hidden>
+                    <a class="menu-item" id="linkGithub" href="#" target="_blank" rel="noopener" hidden>📦GitHub</a>
+                    <a class="menu-item" id="linkChannel" href="#" target="_blank" rel="noopener" hidden>📌訂閱頻道</a>
+                    <a class="menu-item" id="linkVideo" href="#" target="_blank" rel="noopener" hidden>🎬影片教學</a>
+                    <button class="menu-item" id="btnLogout" type="button" hidden>🚪登出</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="offline" id="offline">已與TRMD斷開連線，請確認TRMD是否仍在執行。</div>
+
+<div class="layout">
+    <aside class="sidebar" id="sidebar">
+        <button class="side-item active" data-section="download" type="button">下載</button>
+        <button class="side-item" data-section="upload" type="button">上載</button>
+        <button class="side-item" data-section="listener" type="button">監聽</button>
+        <button class="side-item" data-section="admin" type="button">管理後台</button>
+    </aside>
+
+    <main class="content">
+        <div id="downloadSummary">
+            <div class="panel overall">
+                <div class="overall-top">
+                    <span class="label">總進度</span>
+                    <span class="big" id="overallPercent">0%</span>
+                    <span class="muted" id="overallInfo">0.00B / 0.00B</span>
+                    <span class="muted" id="overallExtra">暫無速度</span>
+                </div>
+                <div class="track track-lg">
+                    <div class="fill" id="overallFill"></div>
+                </div>
+            </div>
+            <div class="stat" id="stat"></div>
+        </div>
+
+        <div id="uploadSummary" hidden>
+            <div class="panel overall">
+                <div class="overall-top">
+                    <span class="label">總進度</span>
+                    <span class="big" id="uploadPercent">0%</span>
+                    <span class="muted" id="uploadInfo">0.00B / 0.00B</span>
+                    <span class="muted" id="uploadExtra">暫無速度</span>
+                </div>
+                <div class="track track-lg">
+                    <div class="fill" id="uploadFill"></div>
+                </div>
+            </div>
+            <div class="stat" id="uploadStat"></div>
+        </div>
+
+        <div class="page" id="page-download">
+            <div class="section-head">
+                <span class="gcount">進行中 <b id="badgeDownload">0</b> 個任務</span>
+                <button class="toggle" id="toggleAll" type="button">全部摺疊</button>
+            </div>
+            <div class="list" data-table="download">
+                <div class="list-scroll">
+                    <div class="list-head">
+                        <span id="headName"><span class="htext">頻道</span></span>
+                        <span class="h-progress"><span class="htext">進度</span></span>
+                        <span class="h-size" id="headSize"><span class="htext">完成 / 總數</span></span>
+                        <span class="h-speed"><span class="htext">速度</span></span>
+                        <span class="h-remain"><span class="htext">剩餘時間</span></span>
+                        <span class="h-status"><span class="htext">狀態</span></span>
+                    </div>
+                    <div id="download"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="page" id="page-upload" hidden>
+            <div class="section-head">
+                <span class="gcount">進行中 <b id="badgeUpload">0</b> 個任務</span>
+                <button class="toggle" id="toggleUpload" type="button">全部摺疊</button>
+            </div>
+            <div class="list" data-table="upload">
+                <div class="list-scroll">
+                    <div class="list-head">
+                        <span class="h-name"><span class="htext">頻道</span></span>
+                        <span class="h-progress"><span class="htext">進度</span></span>
+                        <span class="h-size"><span class="htext">完成 / 總數</span></span>
+                        <span class="h-speed"><span class="htext">速度</span></span>
+                        <span class="h-remain"><span class="htext">剩餘時間</span></span>
+                        <span class="h-status"><span class="htext">狀態</span></span>
+                    </div>
+                    <div id="upload"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="page" id="page-listener" hidden>
+            <div class="tabs" id="listenTabs">
+                <button class="tab active" data-listen="forward" type="button">轉發</button>
+                <button class="tab" data-listen="download" type="button">下載</button>
+            </div>
+            <div class="list listen-two" id="listenForwardBox" data-table="forward">
+                <div class="list-scroll">
+                    <div class="list-head">
+                        <span><span class="htext">監聽頻道</span></span>
+                        <span><span class="htext">轉發頻道</span></span>
+                        <span class="h-action"><span class="htext">操作</span></span>
+                    </div>
+                    <div id="listenForward"></div>
+                </div>
+            </div>
+            <div class="list listen-one" id="listenDownloadBox" data-table="listen_download" hidden>
+                <div class="list-scroll">
+                    <div class="list-head">
+                        <span><span class="htext">監聽頻道</span></span>
+                        <span class="h-action"><span class="htext">操作</span></span>
+                    </div>
+                    <div id="listenDownload"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="page admin-page" id="page-admin" hidden>
+            <section class="admin-card">
+                <div class="admin-head">
+                    <div>
+                        <h2>服務狀態</h2>
+                        <p class="muted">面板只負責管理目前執行中的程式；程式啟動請使用命令列或服務管理器。</p>
+                    </div>
+                    <span class="admin-badge" id="adminServiceState">讀取中</span>
+                </div>
+                <div class="admin-status-grid">
+                    <div><span>機械人</span><strong id="adminBotState">—</strong></div>
+                    <div><span>執行中下載</span><strong id="adminDownloadState">0</strong></div>
+                    <div><span>執行中上載</span><strong id="adminUploadState">0</strong></div>
+                    <div><span>面板綁定位址</span><strong id="adminBindState">—</strong></div>
+                </div>
+                <div class="admin-actions">
+                    <button class="admin-button" id="adminReconnectBot" type="button">重新連線機械人</button>
+                    <button class="admin-button danger" id="adminShutdown" type="button">安全停止程式</button>
+                </div>
+            </section>
+
+            <section class="admin-card">
+                <div class="admin-head">
+                    <div>
+                        <h2>新增下載</h2>
+                        <p class="muted">輸入公開或已加入頻道的 Telegram 訊息連結。</p>
+                    </div>
+                </div>
+                <form id="adminDownloadForm" class="admin-inline-form">
+                    <label class="admin-field grow">
+                        <span>Telegram 連結</span>
+                        <input id="adminDownloadLink" type="url" placeholder="https://t.me/..." required>
+                    </label>
+                    <button class="admin-button primary" type="submit">加入佇列</button>
+                </form>
+            </section>
+
+            <section class="admin-card">
+                <div class="admin-head">
+                    <div>
+                        <h2>新增轉發</h2>
+                        <p class="muted">按訊息 ID 範圍將來源頻道內容轉發至目標頻道，沿用既有媒體群組處理、類型過濾及轉發速率限制。</p>
+                    </div>
+                </div>
+                <form id="adminForwardForm">
+                    <div class="admin-grid">
+                        <label class="admin-field">
+                            <span>來源頻道連結</span>
+                            <input id="adminForwardOrigin" type="url" placeholder="https://t.me/source" required>
+                        </label>
+                        <label class="admin-field">
+                            <span>目標頻道連結</span>
+                            <input id="adminForwardTarget" type="url" placeholder="https://t.me/target" required>
+                        </label>
+                        <label class="admin-field">
+                            <span>起始訊息 ID</span>
+                            <input id="adminForwardStart" type="number" min="1" step="1" required>
+                        </label>
+                        <label class="admin-field">
+                            <span>結束訊息 ID</span>
+                            <input id="adminForwardEnd" type="number" min="1" step="1" required>
+                        </label>
+                    </div>
+                    <div class="admin-actions">
+                        <button class="admin-button primary" id="adminForwardSubmit" type="submit">開始轉發</button>
+                        <span class="admin-feedback" id="adminForwardFeedback" role="status"></span>
+                    </div>
+                </form>
+            </section>
+
+            <section class="admin-card">
+                <div class="admin-head">
+                    <div>
+                        <h2>程式設定</h2>
+                        <p class="muted">密鑰欄位留空代表維持原值；修改需重新啟動的欄位會在儲存後提示。</p>
+                    </div>
+                    <span class="admin-badge" id="adminSettingsState">尚未載入</span>
+                </div>
+                <form id="adminSettingsForm">
+                    <div class="admin-grid">
+                        <label class="admin-field">
+                            <span>API ID</span>
+                            <input id="settingApiId" type="number" min="1" required>
+                        </label>
+                        <label class="admin-field">
+                            <span>API Hash <small id="settingApiHashHint"></small></span>
+                            <input id="settingApiHash" type="password" autocomplete="new-password" placeholder="留空以維持原值">
+                        </label>
+                        <label class="admin-field">
+                            <span>機械人 Token <small id="settingBotTokenHint"></small></span>
+                            <input id="settingBotToken" type="password" autocomplete="new-password" placeholder="留空以維持原值">
+                        </label>
+                        <label class="admin-field">
+                            <span>工作階段目錄</span>
+                            <input id="settingSessionDirectory" type="text">
+                        </label>
+                        <label class="admin-field">
+                            <span>下載目錄</span>
+                            <input id="settingSaveDirectory" type="text" required>
+                        </label>
+                        <label class="admin-field">
+                            <span>暫存目錄</span>
+                            <input id="settingTempDirectory" type="text" required>
+                        </label>
+                        <label class="admin-field">
+                            <span>下載並行數</span>
+                            <input id="settingDownloadTasks" type="number" min="1" max="64" required>
+                        </label>
+                        <label class="admin-field">
+                            <span>上載並行數</span>
+                            <input id="settingUploadTasks" type="number" min="1" max="64" required>
+                        </label>
+                        <label class="admin-field">
+                            <span>下載重試次數</span>
+                            <input id="settingDownloadRetries" type="number" min="0" max="64" required>
+                        </label>
+                        <label class="admin-field">
+                            <span>上載重試次數</span>
+                            <input id="settingUploadRetries" type="number" min="0" max="64" required>
+                        </label>
+                        <label class="admin-field">
+                            <span>啟動時下載連結</span>
+                            <input id="settingLinks" type="text">
+                        </label>
+                        <label class="admin-field">
+                            <span>所有任務完成後自動關機</span>
+                            <select id="settingAutoShutdown">
+                                <option value="false">停用</option>
+                                <option value="true">啟用</option>
+                            </select>
+                        </label>
+                        <label class="admin-field">
+                            <span>代理伺服器</span>
+                            <select id="settingProxyEnabled">
+                                <option value="false">停用</option>
+                                <option value="true">啟用</option>
+                            </select>
+                        </label>
+                        <label class="admin-field">
+                            <span>代理類型</span>
+                            <input id="settingProxyScheme" type="text" placeholder="socks5 或 http">
+                        </label>
+                        <label class="admin-field">
+                            <span>代理主機</span>
+                            <input id="settingProxyHost" type="text">
+                        </label>
+                        <label class="admin-field">
+                            <span>代理連接埠</span>
+                            <input id="settingProxyPort" type="number" min="1" max="65535">
+                        </label>
+                        <label class="admin-field">
+                            <span>代理使用者名稱</span>
+                            <input id="settingProxyUser" type="text">
+                        </label>
+                        <label class="admin-field">
+                            <span>代理密碼 <small id="settingProxyPasswordHint"></small></span>
+                            <input id="settingProxyPassword" type="password" autocomplete="new-password" placeholder="留空以維持原值">
+                        </label>
+                    </div>
+                    <fieldset class="admin-types">
+                        <legend>下載媒體類型</legend>
+                        <label><input type="checkbox" name="downloadType" value="video"> 影片</label>
+                        <label><input type="checkbox" name="downloadType" value="photo"> 相片</label>
+                        <label><input type="checkbox" name="downloadType" value="document"> 文件</label>
+                        <label><input type="checkbox" name="downloadType" value="audio"> 音訊</label>
+                        <label><input type="checkbox" name="downloadType" value="voice"> 語音</label>
+                        <label><input type="checkbox" name="downloadType" value="animation"> 動畫</label>
+                        <label><input type="checkbox" name="downloadType" value="video_note"> 圓形影片</label>
+                        <label><input type="checkbox" name="downloadType" value="live_photo"> 動態相片</label>
+                    </fieldset>
+                    <div class="admin-actions">
+                        <button class="admin-button primary" type="submit">儲存設定</button>
+                        <span class="admin-feedback" id="adminSettingsFeedback" role="status"></span>
+                    </div>
+                </form>
+            </section>
+
+            <section class="admin-card">
+                <div class="admin-head">
+                    <div>
+                        <h2>Telegram 帳號與工作階段</h2>
+                        <p class="muted">顯示目前登入帳號及工作階段檔案；更換登入帳號仍使用程式既有的安全登入流程。</p>
+                    </div>
+                    <button class="admin-button" id="adminRefreshSessions" type="button">重新整理</button>
+                </div>
+                <div id="adminSessions" class="admin-detail">讀取中</div>
+            </section>
+
+            <section class="admin-card">
+                <div class="admin-head">
+                    <div>
+                        <h2>系統資源</h2>
+                        <p class="muted">程序 RSS、系統記憶體估算、CPU 負載及下載磁碟空間。</p>
+                    </div>
+                    <span class="admin-badge" id="adminResourceUpdated">讀取中</span>
+                </div>
+                <div id="adminResources" class="admin-status-grid"></div>
+            </section>
+
+            <section class="admin-card">
+                <div class="admin-head">
+                    <div>
+                        <h2>等待佇列順序</h2>
+                        <p class="muted">每行一個待處理 Telegram 連結；重新排序只影響尚未派發的項目。</p>
+                    </div>
+                </div>
+                <label class="admin-field">
+                    <span>目前待處理連結（每行一項）</span>
+                    <textarea id="adminQueueOrder" rows="5" spellcheck="false"></textarea>
+                </label>
+                <div class="admin-actions">
+                    <button class="admin-button primary" id="adminSaveQueueOrder" type="button">套用佇列順序</button>
+                    <span class="admin-feedback" id="adminQueueFeedback" role="status"></span>
+                </div>
+            </section>
+
+            <section class="admin-card">
+                <div class="admin-head">
+                    <div>
+                        <h2>完整 YAML 設定</h2>
+                        <p class="muted">包含密鑰的設定只會傳送至已登入的本機控制面；儲存前會執行設定結構與值驗證。</p>
+                    </div>
+                    <button class="admin-button" id="adminLoadYaml" type="button">重新載入</button>
+                </div>
+                <label class="admin-field">
+                    <span>config.yaml</span>
+                    <textarea id="adminConfigYaml" rows="16" spellcheck="false"></textarea>
+                </label>
+                <div class="admin-actions">
+                    <button class="admin-button primary" id="adminSaveYaml" type="button">儲存完整設定</button>
+                    <span class="admin-feedback" id="adminYamlFeedback" role="status"></span>
+                </div>
+            </section>
+
+            <section class="admin-card">
+                <div class="admin-head">
+                    <div>
+                        <h2>即時日誌</h2>
+                        <p class="muted">Server-Sent Events (SSE)，僅對已通過 Web 認證的用戶端開放。</p>
+                    </div>
+                    <span class="admin-badge" id="adminLogState">未連線</span>
+                </div>
+                <pre id="adminLogOutput" class="admin-log" aria-live="polite"></pre>
+            </section>
+        </div>
+    </main>
+</div>
+</div>
+
+<!-- 檔案名稱懸停提示:顯示被折行省略的完整名稱,由 JS 定位與填充。 -->
+<div class="name-tip" id="nameTip"></div>
+
+<div class="modal-mask" id="confirmModal" hidden>
+    <div class="modal-card">
+        <div class="modal-head">
+            <span class="modal-title" id="confirmTitle">確認操作</span>
+            <button class="modal-close" id="confirmClose" type="button" title="取消">✖</button>
+        </div>
+        <div class="modal-body" id="confirmText"></div>
+        <div class="modal-foot">
+            <button class="modal-btn" id="confirmCancel" type="button">取消</button>
+            <button class="modal-btn danger" id="confirmOk" type="button">確定</button>
+        </div>
+    </div>
+</div>
+<div class="modal-mask" id="loginModal" hidden>
+    <div class="modal-card login-card">
+        <div class="modal-head">
+            <span class="modal-title">需要登入</span>
+        </div>
+        <div class="modal-body">
+            <div class="login-row">
+                <label class="login-label" for="loginUser">帳號：</label>
+                <input class="login-input" id="loginUser" type="text" autocomplete="username" placeholder="請輸入帳號">
+            </div>
+            <div class="login-row">
+                <label class="login-label" for="loginPass">密碼：</label>
+                <input class="login-input" id="loginPass" type="password" autocomplete="current-password" placeholder="請輸入密碼">
+            </div>
+            <label class="login-remember">
+                <input id="loginRemember" type="checkbox" checked>
+                <span>30天內免登入</span>
+            </label>
+            <button class="modal-btn login-submit" id="loginSubmit" type="button">登入</button>
+        </div>
+    </div>
+</div>
+<script src="js/app.js"></script>
+</body>
+</html>

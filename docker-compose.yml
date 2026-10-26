@@ -1,0 +1,18 @@
+services:
+  trmd:
+    image: gentlesprite/telegram_restricted_media_downloader:latest
+    container_name: trmd
+    restart: 'no'
+    stdin_open: true
+    tty: true
+    ports:
+      - "127.0.0.1:2921:2921"
+    volumes:
+      - ./config:/app/TRMD
+      - ./sessions:/app/sessions
+      - ./downloads:/app/downloads
+      - ./temp:/app/temp
+      - ./form:/app/form
+    environment:
+      - TZ=Asia/Shanghai
+      - TRMD_WEB_HOST=0.0.0.0

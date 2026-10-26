@@ -1,0 +1,59 @@
+name: Release Linux
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python 3.13.2
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.13.2'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements.txt
+
+    - name: Extract metadata
+      shell: bash
+      run: |
+        TAG_NAME=${GITHUB_REF#refs/tags/}
+        CLEAN_VERSION=${TAG_NAME#v}
+        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+        echo "CLEAN_VERSION=$CLEAN_VERSION" >> $GITHUB_ENV
+
+    - name: Build
+      shell: bash
+      run:
+        python3 build.py --disable-cache=all --remove-output
+
+    - name: Prepare release files
+      shell: bash
+      run: |
+        mkdir -p "release/使用手冊"
+        cp "output/TRMD" "release/TRMD"
+        cp "res/使用必讀.pdf" "release/使用手冊/使用必讀.pdf"
+        cp "res/Wiki.pdf" "release/使用手冊/常見問題及解決方案彙總.pdf"
+        cp "res/2_5_1.png" "release/使用手冊/軟件更新教程.png"
+        cd release
+        chmod +x "../res/bin/rar"
+        "../res/bin/rar" a "TRMD_${{ env.CLEAN_VERSION }}-linux-64.rar" "TRMD" "使用手冊"
+        rm -rf "使用手冊"
+
+    - name: Upload release asset to GitHub
+      uses: softprops/action-gh-release@v3
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ env.TAG_NAME }}
+        files: release/*

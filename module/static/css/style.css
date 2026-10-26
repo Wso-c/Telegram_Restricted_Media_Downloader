@@ -1,0 +1,1275 @@
+:root {
+    color-scheme: dark;  /* 提示瀏覽器/Dark Reader 本頁面已是暗色主題,避免被強制反色。 */
+    --bg: #000;  /* 官方 night 帶圖案時底層是純黑(tweb 的 .Slot.IsPattern 背景色),漸變只在塗鴉線條裏透出。 */
+    --panel: rgba(26, 26, 30, .6);  /* 暗色玻璃:深色半透,不是白色疊加層(白層在黑底上會變灰膜)。 */
+    --panel2: rgba(34, 34, 39, .72);  /* 表頭與分組條:比卡片略實一檔。 */
+    --glass-edge: rgba(255, 255, 255, .09);  /* 髮絲級分隔線。 */
+    /* 注:原 --glass-blur / --glass-saturate / --glass-brightness / --liquid-blur
+       四個變量是為 backdrop-filter 服務的,真液態玻璃(liquid-glass.js)移除後
+       已無任何規則引用它們,故刪除。如將來恢復毛玻璃,在此重新定義即可。 */
+    /* 靜態磨砂噪點:128×128 灰度顆粒,用於模擬毛玻璃的漫反射質感。
+       與 backdrop-filter 的本質區別:它不採樣真實背景、也不做模糊,
+       僅在首次渲染時光柵化一次,此後背景漸變每幀推進都無需重算,GPU 開銷幾乎為零。
+       頁面背景本身是平滑漸變、沒有細節需要模糊,所以觀感與真毛玻璃非常接近。
+       顆粒強度由 SVG 裏的 opacity 控制(預設 0.05),想更明顯可調到 0.08~0.1。 */
+    --frost-noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='128' height='128'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='128' height='128' filter='url(%23n)' opacity='0.01'/></svg>");
+    --border: #242b39;
+    --pattern-intensity: .375;  /* 塗鴉濃度,取官方 --pattern-intensity 的值(畫布不透明度)。 */
+    --p: 0%;  /* 圓環進度百分比預設值(帶 %),實際由 JS 通過內聯 style 按元素覆蓋。 */
+    --text: #e7eaf0;
+    --muted: #8a93a6;
+    --accent: #38f9d7;
+    --accent2: #43e97b;
+    --danger: #ff5c7a;
+    --warn: #ffc857;
+    --cols: minmax(0, 1fr) 210px 148px 92px 84px 64px;
+    --page-max: 100%;  /* 內容區最大寬度,預設跟隨視口鋪滿;想恢復居中留白可改成一個像素值。 */
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+html {
+    background: var(--bg);  /* 底色放在根元素上,避免自身背景遮住負層級的畫布與圖案層。 */
+}
+
+body {
+    min-height: 100vh;
+    padding: 24px 16px 48px;
+    color: var(--text);
+    font-family: system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+}
+
+/*
+ * 漸變背景與塗鴉遮罩樣式
+ * 對應 telegram-tt(web.telegram.org/a)的官方背景實現,經改寫適配本專案。
+ * 原始代碼以 GNU GPL-3.0 授權,版權歸相應原作者所有。
+ * 移植並修改: Gentlesprite, 2026-09
+ * SPDX-License-Identifier: GPL-3.0-only
+ */
+/* Telegram 風格的動畫漸變背景:50×50 低分辨率畫布由腳本逐幀繪製,CSS 拉伸鋪滿視口。
+   高度 150%、上移 25% 與 Telegram Web 的 GradientCanvas 樣式一致,避免邊緣露底。 */
+/* 官方 web.telegram.org/a 的背景:黑底 + 漸變畫布被塗鴉圖案遮罩,畫布不透明度取 --pattern-intensity。
+   逐條對應官方 CSS(.hrXj504d.WOInNdza ._4fgy3GBs):
+   inset:0 鋪滿、mask-image 用 pattern.svg、mask-position:50%、mask-size:26.875rem、mask-repeat:repeat。 */
+/* Telegram 風格的動畫漸變背景:畫布由腳本按視口設備分辨率繪製並逐幀補間,塗鴉圖案改由 JS 用
+   destination-in 烘焙進畫布像素(不再用 CSS mask-image)。原因:Chrome 對「帶 CSS mask 的 canvas
+   每幀重繪」會在重合成時先畫出一幀未遮罩的漸變(左半邊閃一下),Edge 的合成器不觸發此 bug;
+   去掉 CSS mask 後只剩 canvas 自身繪製,跨瀏覽器都不閃,且動畫/塗鴉樣式與原來完全一致。 */
+.bg-gradient {
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transition: opacity .3s;
+    pointer-events: none;
+}
+
+.bg-gradient.on {
+    opacity: var(--pattern-intensity);  /* 官方 [data-ready] 的 opacity:var(--pattern-intensity,.5)。 */
+}
+
+.wrap {
+    width: 100%;
+    max-width: var(--page-max);
+    margin: 0 auto;
+}
+
+/* 兩欄佈局 */
+.layout {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+
+/* 未設定機械人時隱藏側邊欄,佈局退化為單欄,主內容佔滿整行。 */
+.layout-single {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+/* 左側邊欄 */
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: sticky;
+    top: 24px;
+}
+
+.side-item {
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel);
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;  /* 短中文標籤不折行,避免火狐裏豎排。 */
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+.side-item:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.side-item.active {
+    border-color: var(--accent);
+    background: rgba(56, 249, 215, .12);
+    color: var(--accent);
+    box-shadow: inset 0 0 0 1px rgba(56, 249, 215, .35);
+}
+
+.content {
+    min-width: 0;
+}
+
+/* 頂部區域 */
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo {
+    position: relative;
+    display: inline-block;
+    padding: 4px 9px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    color: #06231d;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .5px;
+}
+
+/* 滑鼠懸停在logo上時滑出版本資訊,純CSS實現,無需點擊。 */
+.logo-tip {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 156px;
+    padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel2);
+    box-shadow: 0 12px 26px rgba(0, 0, 0, .42);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateY(-6px);
+    pointer-events: none;
+    transition: opacity .16s ease, transform .16s ease;
+}
+
+.logo:hover .logo-tip {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* 檔案名稱懸停提示(完整名稱):與 TRMD 版本提示同一套玻璃質感。
+   不用 .fname 的子元素實現的原因:.fname 為了折行省略設了 overflow:hidden,
+   且是 -webkit-box,子元素提示會被裁掉;故改為獨立的 fixed 元素由 JS 定位。
+   用 opacity/visibility 而非 hidden 屬性:元素保留尺寸,液態玻璃的
+   ResizeObserver 才能在內容變化時重算濾鏡。 */
+.name-tip {
+    position: fixed;
+    z-index: 60;
+    max-width: min(560px, 90vw);
+    padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel2);
+    box-shadow: 0 12px 26px rgba(0, 0, 0, .42);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.5;
+    white-space: normal;  /* 長檔案名稱換行,不像版本提示那樣單行。 */
+    word-break: break-all;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    transition: opacity .16s ease, transform .16s ease, visibility .16s ease;
+}
+
+.name-tip.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.tip-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.tip-key {
+    color: var(--muted);
+}
+
+.tip-val {
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+}
+
+/* 懸停提示統一由 app.js 的 .name-tip 接管:任何帶 data-tip 或 title 的元素都顯示同一套玻璃提示,
+   這裏不要再給 [data-tip] 加偽元素提示,否則會與 JS 提示重複彈出兩個。 */
+
+h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: .5px;
+}
+
+/* 頂欄左側:統一下載、上載、監聽三個板塊的執行狀態。 */
+.status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+/* 頂欄右側的更多選單。 */
+.top-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* 頂欄更多選單:按鈕保持低調,展開的下拉麪板浮在內容之上。 */
+.menu-wrap {
+    position: relative;
+}
+
+.menu-btn {
+    width: 30px;
+    height: 26px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+.menu-btn:hover {
+    border-color: var(--accent);
+    background: rgba(56, 249, 215, .12);
+    color: var(--accent);
+}
+
+.menu-dropdown {
+    position: absolute;
+    top: 32px;
+    right: 0;
+    z-index: 40;
+    min-width: 132px;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
+}
+
+.menu-item {
+    display: block;
+    width: 100%;
+    padding: 8px 10px;
+    border: none;  /* 清除 <button> 的預設邊框(選單裏也用 button 元素)。 */
+    border-radius: 8px;
+    background: transparent;  /* 清除 <button> 的預設底色,否則在深色選單裏出現反色。 */
+    color: var(--text);
+    font-family: inherit;  /* button 不繼承字體,需顯式繼承。 */
+    font-size: 13px;
+    text-align: left;  /* button 預設居中,與連結保持一致。 */
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.menu-item:hover {
+    background: rgba(56, 249, 215, .12);
+    color: var(--accent);
+}
+
+/* 彈出視窗 */
+.modal-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    /* 不要用 backdrop-filter:帶它的元素會成為 backdrop root,
+       導致內部 .modal-card 的液態玻璃只能採樣到這層純平底色,折射完全看不出來。
+       改為只用半透明底色壓暗,且濃度不宜過高,否則背景細節被壓沒、卡片折射無從體現。 */
+    background: rgba(5, 7, 11, .45);
+}
+
+.modal-card {
+    width: min(480px, 100%);
+    max-height: 100%;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: rgba(26, 26, 30, .42);  /* 比 --panel(.6)更透,讓折射出的背景細節透出來。 */
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .55);
+}
+
+.modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel2);
+}
+
+.modal-title {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;  /* 同上:短中文標題不折行。 */
+}
+
+.modal-close {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+.modal-close:hover {
+    border-color: var(--danger);
+    background: rgba(255, 92, 122, .12);
+    color: var(--danger);
+}
+
+/* 確認彈出視窗的正文與按鈕,沿用彈出視窗的玻璃卡片。 */
+.modal-body {
+    padding: 16px;
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-line;  /* 保留提示文案裏的換行。 */
+    word-break: break-all;
+}
+
+.modal-foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 0 16px 14px;
+}
+
+.modal-btn {
+    padding: 7px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+.modal-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.modal-btn.danger:hover {
+    border-color: var(--danger);
+    background: rgba(255, 92, 122, .12);
+    color: var(--danger);
+}
+
+/* 登入卡片:替代瀏覽器原生的 Basic 認證彈出視窗,沿用彈出視窗的玻璃卡片。 */
+/* 登入彈出視窗層級低於通用彈出視窗(.modal-mask 為 50),
+   保證登入失敗時彈出的提示框能蓋在登入卡片之上。 */
+#loginModal {
+    z-index: 40;
+}
+
+.login-card {
+    width: min(300px, 100%);  /* 收窄卡片,輸入框不必過長。 */
+}
+
+/* 詢問框/提示框寬度由文字自身決定:先按文字撐開,達到上限後換行,不再留大片空白。
+   遮罩本身是 flex 居中,所以卡片自然保持居中。 */
+#confirmModal .modal-card {
+    width: fit-content;
+    max-width: min(360px, 90vw);
+}
+
+.alert-card .modal-body {
+    padding: 14px;
+}
+
+/* 帳號/密碼:標籤與輸入框同行,標籤定寬保證兩行對齊。 */
+.login-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 1px;
+}
+
+.login-label {
+    flex: none;
+    min-width: 44px;  /* 用最小寬度而非定寬:定寬 44px 在火狐裏會把"帳號："逐字折行成豎排,
+                         最小寬度既保證兩行標籤對齊,也允許盒子隨文字撐開。 */
+    white-space: nowrap;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.login-input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 11px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, .2);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    transition: border-color .15s ease;
+}
+
+.login-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* 30天內免登入 */
+.login-remember {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: -5px 0 0;  /* 去掉底部間距,讓登入按鈕緊貼勾選行。 */
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.login-remember input {
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.login-submit {
+    margin-top: -5px;
+    display: block;
+    width: 100%;  /* 鋪滿卡片寬度:只有"登入"兩字時右對齊會留下大片空白。 */
+    padding: 9px 16px;
+    border-width: 2px;  /* 邊框加粗,按鈕更厚實。 */
+    border-radius: 9px;
+    font-weight: 600;  /* 文字加粗。 */
+    text-align: center;
+}
+
+/* 未登入時只保留動態漸變背景:隱藏整個頁面內容,登入卡片在 .wrap 之外不受影響。 */
+body.logged-out .wrap {
+    display: none;
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4a5364;
+}
+
+.dot.active {
+    background: var(--accent2);
+    box-shadow: 0 0 0 4px rgba(67, 233, 123, .16);
+}
+
+/* 面板 */
+.panel {
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel);
+}
+
+/* 所有卡片統一為半透明磨砂:暗色半透底 + 噪點 + 上沿高光/下沿暗邊,
+   不做 backdrop-filter 採樣。原 liquid-glass.js(真液態玻璃)已移除、不再使用——
+   它靠 backdrop-filter 即時採樣背景 + SVG 位移產生折射,背景推進時逐幀重算,
+   大面積元素因此明顯卡頓。改回這套純靜態層後 GPU 開銷幾乎為零,
+   背景平滑漸變透出半透明底色即呈現磨砂觀感,與真玻璃差異極小。
+   .group-head 不併入:它仍維持獨立的白色微亮分組條樣式以區分層次。 */
+.side-item,
+.tab,
+.stat div,
+.panel,
+.list,
+.menu-dropdown,
+.logo-tip,
+.name-tip,
+.modal-card,
+th {
+    background-color: rgba(26, 26, 30, .72);
+    background-image:
+        linear-gradient(135deg, rgba(255, 255, 255, .01), rgba(255, 255, 255, 0) 40%),
+        radial-gradient(130% 90% at 15% 0%, rgba(130, 160, 255, .01), rgba(130, 160, 255, 0) 62%),
+        var(--frost-noise);
+    background-repeat: no-repeat, no-repeat, repeat;
+    background-size: auto, auto, 128px 128px;
+    border-color: var(--glass-edge);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, .00),
+        inset 0 -1px 0 rgba(0, 0, 0, .22),
+        0 4px 16px rgba(0, 0, 0, .28);
+}
+
+.overall-top {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.label {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.big {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+}
+
+.muted {
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* 進度列 */
+.track {
+    position: relative;
+    height: 6px;
+    margin: 0;
+    border-radius: 99px;
+    background: #202634;
+    overflow: hidden;
+}
+
+.track-lg {
+    height: 10px;
+    margin: 0;
+}
+
+.fill {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #43e97b, #38f9d7, #43e97b);
+    /* 原先的 background-size: 200% 100% 只為已刪除的流光動畫服務:
+       它讓背景加寬一倍、靠滾動 background-position 露出不同段落。
+       動畫移除後保留它會讓漸變只顯示左半段(綠→青),故去掉,使三色漸變完整呈現。 */
+    box-shadow: 0 0 10px rgba(56, 249, 215, .35);
+    transition: width .5s ease;
+}
+
+/* 統計 */
+.stat {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin: 12px 0 4px;
+}
+
+.stat div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    /* 只設 background-color:用 background 簡寫會清掉統一磨砂塊的漸變與噪點圖層。 */
+    background-color: var(--panel);
+}
+
+/* 統計卡可點擊篩選 */
+.stat div[data-filter] {
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+
+.stat div[data-filter]:hover {
+    border-color: var(--accent);
+}
+
+.stat div[data-filter].active {
+    border-color: var(--accent);
+    background: rgba(56, 249, 215, .12);
+    color: var(--accent);
+}
+
+/* .panel 與 .list 已併入上方統一磨砂塊,不再單獨定義,避免兩套樣式互相覆蓋。 */
+
+/* 統計卡的標籤與數值都是兩三個字,列寬被壓縮時不允許折行:
+   火狐允許 CJK 逐字斷行,一旦壓縮就會豎排成"已跳/過"。 */
+.stat span {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.stat b {
+    white-space: nowrap;
+    font-size: 17px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.ok {
+    color: var(--accent2);
+}
+
+.bad {
+    color: var(--danger);
+}
+
+.skip {
+    color: var(--warn);
+}
+
+.queue {
+    color: #7fb3ff;
+}
+
+.page[hidden] {
+    display: none;
+}
+
+/* 監聽頁的頂部選項卡 */
+.tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.tab {
+    padding: 7px 18px;
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    /* 同上:保留統一磨砂塊的漸變與噪點,不覆蓋整條 background。 */
+    background-color: var(--panel);
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;  /* 同上:短中文標籤不折行。 */
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+.tab:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.tab.active {
+    border-color: var(--accent);
+    background: rgba(56, 249, 215, .12);
+    color: var(--accent);
+    box-shadow: inset 0 0 0 1px rgba(56, 249, 215, .35);
+}
+
+.section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.section-head h2 {
+    margin-bottom: 0;
+}
+
+h2 {
+    margin-bottom: 10px;
+    padding-left: 9px;
+    border-left: 3px solid var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.toggle {
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.toggle:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* 列表 */
+.list {
+    --cols: minmax(0, 1fr) 210px 148px 92px 84px 64px;  /* 下載、上載表的列寬來源,首列為彈性列,其餘列為可拖拽的固定列。 */
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    /* 同上:保留統一磨砂塊的漸變與噪點。 */
+    background-color: var(--panel);
+    overflow: hidden;
+}
+
+.list-head {
+    display: grid;
+    grid-template-columns: var(--cols);
+    gap: 12px;
+    align-items: center;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    /* 與面板同一張靜態噪點,保持磨砂質感統一;底色仍是半透明的 --panel2。 */
+    background-color: var(--panel2);
+    background-image: var(--frost-noise);
+    background-repeat: repeat;
+    background-size: 128px 128px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* 表頭的每個列格作為分隔條的定位參照,並加圓角與內邊距,使其呈現玻璃片折射質感。 */
+.list-head > span {
+    position: relative;
+    padding: 3px 8px;
+    border-radius: 8px;
+    min-width: 0;  /* 允許列寬被壓縮時文字省略而非撐開或豎排。 */
+}
+
+/* 列標題文字:寬度不足時以省略號截斷,保持橫向單行,不換行豎排。 */
+.list-head > span .htext {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 列寬拖拽分隔條,覆蓋列間隙,常顯一小段細線提示此處可拖拽,按下後左右拖動調整列寬。 */
+.grip {
+    position: absolute;
+    top: -8px;  /* 上下各外擴表頭內邊距,讓拖拽熱區覆蓋整個表頭高度。 */
+    bottom: -8px;
+    right: -6px;
+    width: 12px;
+    z-index: 5;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.grip::before {
+    content: '';
+    position: absolute;
+    top: 35%;
+    bottom: 35%;
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    border-radius: 2px;
+    background: var(--border);
+    transition: background .15s ease;
+}
+
+.grip:hover::before,
+body.resizing .grip::before {
+    background: var(--accent);  /* 懸停或拖拽時保持原高度,只高亮提示可拖拽。 */
+}
+
+body.resizing {
+    cursor: col-resize;
+    user-select: none;
+}
+
+.task-row {
+    display: grid;
+    grid-template-columns: var(--cols);
+    gap: 12px;
+    align-items: center;
+    padding: 9px 14px;
+    border-bottom: 1px solid rgba(36, 43, 57, .6);
+    font-size: 13px;
+}
+
+.task-row:hover {
+    background: rgba(56, 249, 215, .05);
+}
+
+/* 行內所有單元格:列寬被壓縮到極限時允許收縮,由自身規則截斷,絕不溢出覆蓋相鄰列。 */
+.task-row > *,
+.group-head > * {
+    min-width: 0;
+}
+
+.list > :last-child .task-row:last-child,
+.list > .task-row:last-child {
+    border-bottom: none;
+}
+
+/* 橫向滾動時,行與分組的盒子必須覆蓋完整列寬。
+   網格軌道會溢出容器,但盒子本身只有容器寬度,其背景與邊框只繪製到容器邊緣;
+   滾動才能看到的那一段就沒有行底色,導致"初始可見區"與"滾動可見區"配色不一致。
+   min-content 等於各列最小寬度之和,桌面端它小於可用寬度,故無副作用。 */
+.list-head,
+.task-row,
+.group-head,
+.group,
+.group-body {
+    min-width: min-content;
+}
+
+/* 監聽頁的列:轉發為監聽頻道與轉發頻道兩列,下載只有一列,末列固定為操作按鈕。 */
+.listen-two {
+    --cols: minmax(0, 1fr) 240px 56px;
+}
+
+.listen-one {
+    --cols: minmax(0, 1fr) 56px;
+}
+
+.h-action {
+    text-align: right;
+}
+
+.cell-action {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.btn-del {
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+.btn-del:hover {
+    border-color: var(--danger);
+    background: rgba(255, 92, 122, .12);
+    color: var(--danger);
+}
+
+/* 分組 */
+.group {
+    border-bottom: 1px solid rgba(36, 43, 57, .6);
+}
+
+.group:last-child {
+    border-bottom: none;
+}
+
+.group-head {
+    display: grid;
+    grid-template-columns: var(--cols);
+    gap: 12px;
+    align-items: center;
+    padding: 9px 14px;
+    /* 同樣疊一層靜態噪點,使分組條與面板的磨砂質感一致。 */
+    background-color: rgba(255, 255, 255, .03);
+    background-image: var(--frost-noise);
+    background-repeat: repeat;
+    background-size: 128px 128px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.group-head:hover {
+    background: rgba(56, 249, 215, .07);
+}
+
+.group-body .task-row {
+    background: rgba(0, 0, 0, .16);
+}
+
+/* 縮進放在名稱單元格內,而不是整行:
+   行級 padding-left 會擠壓名稱列(1fr),令其後的固定列整體左移、與表頭錯位;
+   下沉到 .cell-name 後各行可用寬度一致,列位置對齊,縮進量保持不變(30-14=16)。 */
+.group-body .task-row > .cell-name,
+.group-body .group-head > .cell-name {
+    padding-left: 16px;
+}
+
+.group-body .task-row:last-child {
+    border-bottom: none;
+}
+
+.arrow {
+    flex: none;
+    width: 0;
+    height: 0;
+    border-left: 5px solid var(--muted);
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    transition: transform .15s ease;
+}
+
+/* 只旋轉目前分組自己的箭頭,避免嵌套分組的箭頭被父級影響。 */
+.group.open > .group-head .arrow {
+    transform: rotate(90deg);
+}
+
+/* 嵌套分組(頻道 > 連結),逐層縮進。 */
+.group-body .group-head {
+    font-weight: 500;
+    background: rgba(0, 0, 0, .16);
+}
+
+.group-body .group-body .task-row {
+    background: rgba(0, 0, 0, .24);
+}
+
+/* 二級嵌套縮進(52-14=38),同樣只作用於名稱單元格。 */
+.group-body .group-body .task-row > .cell-name {
+    padding-left: 38px;
+}
+
+.group-body .group-body .more {
+    padding-left: 52px;
+}
+
+/* 單元格 */
+.cell-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;  /* 列寬被壓縮到極限時,圖標與計數不得溢出覆蓋右側列。 */
+}
+
+.ficon {
+    flex: none;
+    font-size: 14px;
+}
+
+/* 檔案名稱最多兩行:放得下就只佔一行,放不下才折到第二行並省略。
+   每個名稱按自身長度與目前列寬獨立自適應,不依賴任何固定寬度閾值。 */
+.fname,
+.gname {
+    overflow: hidden;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.gcount {
+    flex: none;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--muted);
+}
+
+
+
+/* 進度列的最小寬度:保證圓環/進度列與百分比都能完整顯示,
+   避免拖窄後百分比被裁切。由 measureColMins 讀取 --col-min 參與列寬下限計算。 */
+.h-progress {
+    --col-min: 72px;
+}
+
+.cell-progress {
+    --p: 0%;  /* 進度百分比,由 JS 通過內聯 style 覆蓋;此處為靜態檢查與缺省時的回退值。 */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;  /* 進度列有最小寬度,窄列時在此處截斷而非溢出。 */
+}
+
+.cell-progress .track {
+    flex: 1;
+    min-width: 0;  /* 允許壓縮到 0:空間不足時優先犧牲進度列,保證百分比文字不被裁掉。 */
+}
+
+.pct {
+    flex: none;
+    min-width: 44px;  /* 用最小寬度而非定寬:進度欄也會顯示狀態文字(已跳過/佇列中),
+                         定寬 44px 在火狐裏會被逐字折行成豎排,最小寬度可讓盒子隨文字撐開。 */
+    white-space: nowrap;
+    text-align: right;
+    font-size: 12px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+}
+
+/* 不支援或被忽略的類型的提示文字,佔滿進度欄並省略超長內容。 */
+.pct.note {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+}
+
+.cell-size,
+.cell-speed,
+.cell-remain {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.cell-status {
+    font-size: 12px;
+    color: var(--muted);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.status-running {
+    color: var(--accent2);
+}
+
+.status-pending {
+    color: var(--warn);
+}
+
+.pending-row {
+    opacity: .82;
+}
+
+.pending-row .pct {
+    color: var(--warn);
+}
+
+.status-done {
+    color: var(--muted);
+}
+
+.status-failed {
+    color: var(--danger);
+}
+
+.status-skip {
+    color: var(--muted);
+}
+
+.member-row {
+    opacity: .9;
+}
+
+.more {
+    padding: 6px 14px 8px 30px;
+    color: #5f6879;
+    font-size: 12px;
+}
+
+/* 空態 */
+.empty {
+    padding: 20px 12px;
+    color: #5f6879;
+    font-size: 13px;
+    text-align: center;
+}
+
+/* 表格 */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+th,
+td {
+    padding: 9px 10px;
+    border-bottom: 1px solid rgba(36, 43, 57, .6);
+    text-align: left;
+}
+
+th {
+    /* 同上:表頭比卡片實一檔,但仍要保留磨砂塊的漸變與噪點。 */
+    background-color: var(--panel2);
+    color: var(--muted);
+    font-weight: 600;
+}
+
+td {
+    font-variant-numeric: tabular-nums;
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+tbody tr:hover {
+    background: rgba(56, 249, 215, .05);
+}
+
+.offline {
+    display: none;
+    margin-top: 14px;
+    padding: 10px 14px;
+    border: 1px solid #5c2b34;
+    border-radius: 10px;
+    background: #2a1a1f;
+    color: var(--danger);
+    font-size: 13px;
+}
+
+/* 響應式 */
+
+/* 超寬屏:收回鋪滿策略限制最大寬度,避免表格行過長影響閱讀。 */
+@media (min-width: 2400px) {
+    :root {
+        --page-max: 2200px;
+    }
+}
+
+@media (max-width: 760px) {
+    .layout {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+        flex-direction: row;
+        position: static;
+    }
+
+    .side-item {
+        flex: 1;
+        text-align: center;
+    }
+
+    /* 移動端不再隱藏列,改為橫向滾動,分隔條保持可拖拽調整列寬。
+       滾動交給內層 .list-scroll:backdrop-filter 與 overflow 加在同一元素上時,
+       滾動區域會丟失毛玻璃效果,故把"滾動"與"玻璃"拆到兩個元素上。 */
+    .list-scroll {
+        overflow-x: auto;
+    }
+
+    /* 移動端收縮嵌套縮進,把寬度讓給檔案名稱(原 16/38,現 8/16)。 */
+    .group-body .task-row > .cell-name,
+    .group-body .group-head > .cell-name {
+        padding-left: 8px;
+    }
+
+    .group-body .group-body .task-row > .cell-name {
+        padding-left: 16px;
+    }
+
+    /* 窄屏優先保證檔案名稱可見:
+       .gcount 是 flex:none(永不收縮),會硬佔約 65px,讓檔案名稱只剩幾十像素,故隱藏。 */
+    .cell-name .gcount {
+        display: none;
+    }
+
+    /* 移動端可用寬度更小,行數上限放寬到 3 行(基礎規則為 2 行),
+       進一步減少檔案名稱被省略。仍是內容自適應:短名稱只佔一行,放不下才逐行增加。 */
+    .fname,
+    .gname {
+        -webkit-line-clamp: 3;
+    }
+}
+
+@media (max-width: 620px) {
+    .stat {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* 手機端:橫向進度列在窄屏會顯得過長,改用圓環(環形)展示進度。
+   圓環由 conic-gradient 按 --p 着色,再用徑向遮罩掏空中心,背景透出即自然成環。 */
+@media (max-width: 760px) {
+    .cell-progress {
+        justify-content: flex-end;
+        gap: 6px;
+    }
+
+    .cell-progress .track {
+        flex: none;
+        width: 14px;          /* 繼續縮小直徑。 */
+        height: 14px;
+        min-width: 0;
+        border-radius: 50%;
+        overflow: visible;  /* 遮罩作用於自身,不再裁切橫向填充。 */
+        background: conic-gradient(var(--accent) var(--p, 0%), rgba(255, 255, 255, .1) 0);
+        /* 掏空比例下移使環帶更粗;過渡帶收窄到 6%,避免過寬導致發糊。 */
+        -webkit-mask: radial-gradient(transparent 36%, #000 42%);
+        mask: radial-gradient(transparent 36%, #000 42%);
+    }
+
+    .cell-progress .track .fill {
+        display: none;  /* 環形已用 conic 表達,隱藏原橫向填充塊。 */
+    }
+}

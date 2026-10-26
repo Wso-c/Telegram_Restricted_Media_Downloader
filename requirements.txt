@@ -1,0 +1,7 @@
+tgcrypto
+PyYAML
+rich==15.0.0
+pyreadline3
+kurigram==2.2.26
+pygments
+pymediainfo==7.0.1
